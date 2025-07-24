@@ -644,9 +644,13 @@ function isZodRawShape(obj) {
     if (typeof obj !== "object" || obj === null)
         return false;
     const isEmptyObject = Object.keys(obj).length === 0;
-    // Check if object is empty or at least one property is a ZodType instance
+    // Filter out the ~standard property when checking values (Zod v4 compatibility)
+    const filteredValues = Object.entries(obj)
+        .filter(([key]) => key !== "~standard")
+        .map(([, value]) => value);
+    // Check if object is empty or at least one property (excluding ~standard) is a ZodType instance
     // Note: use heuristic check to avoid instanceof failure across different Zod versions
-    return isEmptyObject || Object.values(obj).some(isZodTypeLike);
+    return isEmptyObject || filteredValues.some(isZodTypeLike);
 }
 function isZodTypeLike(value) {
     return (value !== null &&
