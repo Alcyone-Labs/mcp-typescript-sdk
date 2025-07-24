@@ -106,8 +106,8 @@ export declare class McpServer {
     registerTool<InputArgs extends ZodRawShape, OutputArgs extends ZodRawShape>(name: string, config: {
         title?: string;
         description?: string;
-        inputSchema?: InputArgs;
-        outputSchema?: OutputArgs;
+        inputSchema?: InputArgs | ZodObject<InputArgs>;
+        outputSchema?: OutputArgs | ZodObject<OutputArgs>;
         annotations?: ToolAnnotations;
     }, cb: ToolCallback<InputArgs>): RegisteredTool;
     /**

@@ -455,8 +455,16 @@ class McpServer {
         const registeredTool = {
             title,
             description,
-            inputSchema: inputSchema === undefined ? undefined : zod_1.z.object(inputSchema),
-            outputSchema: outputSchema === undefined ? undefined : zod_1.z.object(outputSchema),
+            inputSchema: inputSchema === undefined
+                ? undefined
+                : isZodTypeLike(inputSchema)
+                    ? inputSchema
+                    : zod_1.z.object(inputSchema),
+            outputSchema: outputSchema === undefined
+                ? undefined
+                : isZodTypeLike(outputSchema)
+                    ? outputSchema
+                    : zod_1.z.object(outputSchema),
             annotations,
             callback,
             enabled: true,
