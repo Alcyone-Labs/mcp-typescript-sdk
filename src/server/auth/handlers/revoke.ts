@@ -47,10 +47,10 @@ export function revocationHandler({
         standardHeaders: true,
         legacyHeaders: false,
         message: new TooManyRequestsError(
-          "You have exceeded the rate limit for token revocation requests"
+          "You have exceeded the rate limit for token revocation requests",
         ).toResponseObject(),
         ...rateLimitConfig,
-      })
+      }),
     );
   }
 
@@ -66,7 +66,7 @@ export function revocationHandler({
         throw new InvalidRequestError(parseResult.error.message);
       }
 
-      const client = req.client;
+      const client = (req as any).client;
       if (!client) {
         // This should never happen
         throw new ServerError("Internal Server Error");

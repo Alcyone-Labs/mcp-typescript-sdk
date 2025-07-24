@@ -8,6 +8,7 @@ import {
   isJSONRPCResponse,
   isJSONRPCNotification,
   JSONRPCError,
+  JSONRPCMessage,
   JSONRPCNotification,
   JSONRPCRequest,
   JSONRPCResponse,
@@ -103,58 +104,64 @@ export type NotificationOptions = {
    * May be used to indicate to the transport which incoming request to associate this outgoing notification with.
    */
   relatedRequestId?: RequestId;
-}
+};
 
 /**
  * Extra data given to request handlers.
  */
-export type RequestHandlerExtra<SendRequestT extends Request,
-  SendNotificationT extends Notification> = {
-    /**
-     * An abort signal used to communicate if the request was cancelled from the sender's side.
-     */
-    signal: AbortSignal;
+export type RequestHandlerExtra<
+  SendRequestT extends Request,
+  SendNotificationT extends Notification,
+> = {
+  /**
+   * An abort signal used to communicate if the request was cancelled from the sender's side.
+   */
+  signal: AbortSignal;
 
-    /**
-     * Information about a validated access token, provided to request handlers.
-     */
-    authInfo?: AuthInfo;
+  /**
+   * Information about a validated access token, provided to request handlers.
+   */
+  authInfo?: AuthInfo;
 
-    /**
-     * The session ID from the transport, if available.
-     */
-    sessionId?: string;
+  /**
+   * The session ID from the transport, if available.
+   */
+  sessionId?: string;
 
-    /**
-     * Metadata from the original request.
-     */
-    _meta?: RequestMeta;
+  /**
+   * Metadata from the original request.
+   */
+  _meta?: RequestMeta;
 
-    /**
-     * The JSON-RPC ID of the request being handled.
-     * This can be useful for tracking or logging purposes.
-     */
-    requestId: RequestId;
+  /**
+   * The JSON-RPC ID of the request being handled.
+   * This can be useful for tracking or logging purposes.
+   */
+  requestId: RequestId;
 
-    /**
-     * The original HTTP request.
-     */
-    requestInfo?: RequestInfo;
+  /**
+   * The original HTTP request.
+   */
+  requestInfo?: RequestInfo;
 
-    /**
-     * Sends a notification that relates to the current request being handled.
-     * 
-     * This is used by certain transports to correctly associate related messages.
-     */
-    sendNotification: (notification: SendNotificationT) => Promise<void>;
+  /**
+   * Sends a notification that relates to the current request being handled.
+   *
+   * This is used by certain transports to correctly associate related messages.
+   */
+  sendNotification: (notification: SendNotificationT) => Promise<void>;
 
-    /**
-     * Sends a request that relates to the current request being handled.
-     * 
-     * This is used by certain transports to correctly associate related messages.
-     */
-    sendRequest: <U extends ZodType<object>>(request: SendRequestT, resultSchema: U, options?: RequestOptions) => Promise<z.infer<U>>;
-  };
+  /**
+   * Sends a request that relates to the current request being handled.
+   *
+   * This is used by certain transports to correctly associate related messages.
+   */
+  sendRequest: <U extends ZodType<object>>(
+    request: SendRequestT,
+    resultSchema: U,
+    options?: RequestOptions,
+  ) => Promise<z.infer<U>>;
+};
 
 /**
  * Information about a request's timeout state
@@ -248,7 +255,7 @@ export abstract class Protocol<
     timeout: number,
     maxTotalTimeout: number | undefined,
     onTimeout: () => void,
-    resetTimeoutOnProgress: boolean = false
+    resetTimeoutOnProgress: boolean = false,
   ) {
     this._timeoutInfo.set(messageId, {
       timeoutId: setTimeout(onTimeout, timeout),
@@ -256,7 +263,7 @@ export abstract class Protocol<
       timeout,
       maxTotalTimeout,
       resetTimeoutOnProgress,
-      onTimeout
+      onTimeout,
     });
   }
 
@@ -270,7 +277,7 @@ export abstract class Protocol<
       throw new McpError(
         ErrorCode.RequestTimeout,
         "Maximum total timeout exceeded",
-        { maxTotalTimeout: info.maxTotalTimeout, totalElapsed }
+        { maxTotalTimeout: info.maxTotalTimeout, totalElapsed },
       );
     }
 
@@ -330,6 +337,13 @@ export abstract class Protocol<
     this._responseHandlers = new Map();
     this._progressHandlers.clear();
     this._pendingDebouncedNotifications.clear();
+
+    // Clean up all pending timeouts
+    for (const info of this._timeoutInfo.values()) {
+      clearTimeout(info.timeoutId);
+    }
+    this._timeoutInfo.clear();
+
     this._transport = undefined;
     this.onclose?.();
 
@@ -345,8 +359,9 @@ export abstract class Protocol<
 
   private _onnotification(notification: JSONRPCNotification): void {
     const handler =
-      this._notificationHandlers.get(notification.method) ??
-      this.fallbackNotificationHandler;
+      this._notificationHandlers.get(
+        (notification as JSONRPCNotification).method,
+      ) ?? this.fallbackNotificationHandler;
 
     // Ignore notifications not being subscribed to.
     if (handler === undefined) {
@@ -355,7 +370,7 @@ export abstract class Protocol<
 
     // Starting with Promise.resolve() puts any synchronous errors into the monad as well.
     Promise.resolve()
-      .then(() => handler(notification))
+      .then(() => handler(notification as JSONRPCNotification))
       .catch((error) =>
         this._onerror(
           new Error(`Uncaught error in notification handler: ${error}`),
@@ -365,7 +380,8 @@ export abstract class Protocol<
 
   private _onrequest(request: JSONRPCRequest, extra?: MessageExtraInfo): void {
     const handler =
-      this._requestHandlers.get(request.method) ?? this.fallbackRequestHandler;
+      this._requestHandlers.get((request as any).method) ??
+      this.fallbackRequestHandler;
 
     if (handler === undefined) {
       this._transport
@@ -391,20 +407,22 @@ export abstract class Protocol<
     const fullExtra: RequestHandlerExtra<SendRequestT, SendNotificationT> = {
       signal: abortController.signal,
       sessionId: this._transport?.sessionId,
-      _meta: request.params?._meta,
-      sendNotification:
-        (notification) =>
-          this.notification(notification, { relatedRequestId: request.id }),
+      _meta: (request as JSONRPCRequest).params?._meta,
+      sendNotification: (notification) =>
+        this.notification(notification, { relatedRequestId: request.id }),
       sendRequest: (r, resultSchema, options?) =>
-        this.request(r, resultSchema, { ...options, relatedRequestId: request.id }),
+        this.request(r, resultSchema, {
+          ...options,
+          relatedRequestId: request.id,
+        }),
       authInfo: extra?.authInfo,
       requestId: request.id,
-      requestInfo: extra?.requestInfo
+      requestInfo: extra?.requestInfo,
     };
 
     // Starting with Promise.resolve() puts any synchronous errors into the monad as well.
     Promise.resolve()
-      .then(() => handler(request, fullExtra))
+      .then(() => handler(request as JSONRPCRequest, fullExtra))
       .then(
         (result) => {
           if (abortController.signal.aborted) {
@@ -448,7 +466,11 @@ export abstract class Protocol<
 
     const handler = this._progressHandlers.get(messageId);
     if (!handler) {
-      this._onerror(new Error(`Received a progress notification for an unknown token: ${JSON.stringify(notification)}`));
+      this._onerror(
+        new Error(
+          `Received a progress notification for an unknown token: ${JSON.stringify(notification)}`,
+        ),
+      );
       return;
     }
 
@@ -503,7 +525,14 @@ export abstract class Protocol<
    * Closes the connection.
    */
   async close(): Promise<void> {
-    await this._transport?.close();
+    const transport = this._transport;
+    if (transport) {
+      await transport.close();
+      // Only call _onclose if the transport didn't trigger it
+      if (this._transport === transport) {
+        this._onclose();
+      }
+    }
   }
 
   /**
@@ -541,7 +570,8 @@ export abstract class Protocol<
     resultSchema: T,
     options?: RequestOptions,
   ): Promise<z.infer<T>> {
-    const { relatedRequestId, resumptionToken, onresumptiontoken } = options ?? {};
+    const { relatedRequestId, resumptionToken, onresumptiontoken } =
+      options ?? {};
 
     return new Promise((resolve, reject) => {
       if (!this._transport) {
@@ -556,7 +586,7 @@ export abstract class Protocol<
       options?.signal?.throwIfAborted();
 
       const messageId = this._requestMessageId++;
-      const jsonrpcRequest: JSONRPCRequest = {
+      const jsonrpcRequest = {
         ...request,
         jsonrpc: "2.0",
         id: messageId,
@@ -564,11 +594,11 @@ export abstract class Protocol<
 
       if (options?.onprogress) {
         this._progressHandlers.set(messageId, options.onprogress);
-        jsonrpcRequest.params = {
+        (jsonrpcRequest as JSONRPCRequest).params = {
           ...request.params,
           _meta: {
             ...(request.params?._meta || {}),
-            progressToken: messageId
+            progressToken: messageId,
           },
         };
       }
@@ -579,14 +609,17 @@ export abstract class Protocol<
         this._cleanupTimeout(messageId);
 
         this._transport
-          ?.send({
-            jsonrpc: "2.0",
-            method: "notifications/cancelled",
-            params: {
-              requestId: messageId,
-              reason: String(reason),
-            },
-          }, { relatedRequestId, resumptionToken, onresumptiontoken })
+          ?.send(
+            {
+              jsonrpc: "2.0",
+              method: "notifications/cancelled",
+              params: {
+                requestId: messageId,
+                reason: String(reason),
+              },
+            } as JSONRPCNotification,
+            { relatedRequestId, resumptionToken, onresumptiontoken },
+          )
           .catch((error) =>
             this._onerror(new Error(`Failed to send cancellation: ${error}`)),
           );
@@ -616,25 +649,41 @@ export abstract class Protocol<
       });
 
       const timeout = options?.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
-      const timeoutHandler = () => cancel(new McpError(
-        ErrorCode.RequestTimeout,
-        "Request timed out",
-        { timeout }
-      ));
+      const timeoutHandler = () =>
+        cancel(
+          new McpError(ErrorCode.RequestTimeout, "Request timed out", {
+            timeout,
+          }),
+        );
 
-      this._setupTimeout(messageId, timeout, options?.maxTotalTimeout, timeoutHandler, options?.resetTimeoutOnProgress ?? false);
+      this._setupTimeout(
+        messageId,
+        timeout,
+        options?.maxTotalTimeout,
+        timeoutHandler,
+        options?.resetTimeoutOnProgress ?? false,
+      );
 
-      this._transport.send(jsonrpcRequest, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error) => {
-        this._cleanupTimeout(messageId);
-        reject(error);
-      });
+      this._transport
+        .send(jsonrpcRequest as JSONRPCMessage, {
+          relatedRequestId,
+          resumptionToken,
+          onresumptiontoken,
+        })
+        .catch((error) => {
+          this._cleanupTimeout(messageId);
+          reject(error);
+        });
     });
   }
 
   /**
    * Emits a notification, which is a one-way message that does not expect a response.
    */
-  async notification(notification: SendNotificationT, options?: NotificationOptions): Promise<void> {
+  async notification(
+    notification: SendNotificationT,
+    options?: NotificationOptions,
+  ): Promise<void> {
     if (!this._transport) {
       throw new Error("Not connected");
     }
@@ -644,9 +693,10 @@ export abstract class Protocol<
     const debouncedMethods = this._options?.debouncedNotificationMethods ?? [];
     // A notification can only be debounced if it's in the list AND it's "simple"
     // (i.e., has no parameters and no related request ID that could be lost).
-    const canDebounce = debouncedMethods.includes(notification.method)
-      && !notification.params
-      && !(options?.relatedRequestId);
+    const canDebounce =
+      debouncedMethods.includes(notification.method) &&
+      !notification.params &&
+      !options?.relatedRequestId;
 
     if (canDebounce) {
       // If a notification of this type is already scheduled, do nothing.
@@ -668,25 +718,27 @@ export abstract class Protocol<
           return;
         }
 
-        const jsonrpcNotification: JSONRPCNotification = {
+        const jsonrpcNotification = {
           ...notification,
           jsonrpc: "2.0",
         };
         // Send the notification, but don't await it here to avoid blocking.
         // Handle potential errors with a .catch().
-        this._transport?.send(jsonrpcNotification, options).catch(error => this._onerror(error));
+        this._transport
+          ?.send(jsonrpcNotification as JSONRPCMessage, options)
+          .catch((error) => this._onerror(error));
       });
 
       // Return immediately.
       return;
     }
 
-    const jsonrpcNotification: JSONRPCNotification = {
+    const jsonrpcNotification = {
       ...notification,
       jsonrpc: "2.0",
     };
 
-    await this._transport.send(jsonrpcNotification, options);
+    await this._transport.send(jsonrpcNotification as JSONRPCMessage, options);
   }
 
   /**

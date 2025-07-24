@@ -1,11 +1,23 @@
 import express, { RequestHandler } from "express";
-import { clientRegistrationHandler, ClientRegistrationHandlerOptions } from "./handlers/register.js";
+import {
+  clientRegistrationHandler,
+  ClientRegistrationHandlerOptions,
+} from "./handlers/register.js";
 import { tokenHandler, TokenHandlerOptions } from "./handlers/token.js";
-import { authorizationHandler, AuthorizationHandlerOptions } from "./handlers/authorize.js";
-import { revocationHandler, RevocationHandlerOptions } from "./handlers/revoke.js";
+import {
+  authorizationHandler,
+  AuthorizationHandlerOptions,
+} from "./handlers/authorize.js";
+import {
+  revocationHandler,
+  RevocationHandlerOptions,
+} from "./handlers/revoke.js";
 import { metadataHandler } from "./handlers/metadata.js";
 import { OAuthServerProvider } from "./provider.js";
-import { OAuthMetadata, OAuthProtectedResourceMetadata } from "../../shared/auth.js";
+import {
+  OAuthMetadata,
+  OAuthProtectedResourceMetadata,
+} from "../../shared/auth.js";
 
 export type AuthRouterOptions = {
   /**
@@ -35,7 +47,6 @@ export type AuthRouterOptions = {
    */
   scopesSupported?: string[];
 
-
   /**
    * The resource name to be displayed in protected resource metadata
    */
@@ -43,14 +54,21 @@ export type AuthRouterOptions = {
 
   // Individual options per route
   authorizationOptions?: Omit<AuthorizationHandlerOptions, "provider">;
-  clientRegistrationOptions?: Omit<ClientRegistrationHandlerOptions, "clientsStore">;
+  clientRegistrationOptions?: Omit<
+    ClientRegistrationHandlerOptions,
+    "clientsStore"
+  >;
   revocationOptions?: Omit<RevocationHandlerOptions, "provider">;
   tokenOptions?: Omit<TokenHandlerOptions, "provider">;
 };
 
 const checkIssuerUrl = (issuer: URL): void => {
   // Technically RFC 8414 does not permit a localhost HTTPS exemption, but this will be necessary for ease of testing
-  if (issuer.protocol !== "https:" && issuer.hostname !== "localhost" && issuer.hostname !== "127.0.0.1") {
+  if (
+    issuer.protocol !== "https:" &&
+    issuer.hostname !== "localhost" &&
+    issuer.hostname !== "127.0.0.1"
+  ) {
     throw new Error("Issuer URL must be HTTPS");
   }
   if (issuer.hash) {
@@ -59,13 +77,13 @@ const checkIssuerUrl = (issuer: URL): void => {
   if (issuer.search) {
     throw new Error(`Issuer URL must not have a query string: ${issuer}`);
   }
-}
+};
 
 export const createOAuthMetadata = (options: {
-  provider: OAuthServerProvider,
-  issuerUrl: URL,
-  baseUrl?: URL
-  serviceDocumentationUrl?: URL,
+  provider: OAuthServerProvider;
+  issuerUrl: URL;
+  baseUrl?: URL;
+  serviceDocumentationUrl?: URL;
   scopesSupported?: string[];
 }): OAuthMetadata => {
   const issuer = options.issuerUrl;
@@ -75,14 +93,19 @@ export const createOAuthMetadata = (options: {
 
   const authorization_endpoint = "/authorize";
   const token_endpoint = "/token";
-  const registration_endpoint = options.provider.clientsStore.registerClient ? "/register" : undefined;
-  const revocation_endpoint = options.provider.revokeToken ? "/revoke" : undefined;
+  const registration_endpoint = options.provider.clientsStore.registerClient
+    ? "/register"
+    : undefined;
+  const revocation_endpoint = options.provider.revokeToken
+    ? "/revoke"
+    : undefined;
 
   const metadata: OAuthMetadata = {
     issuer: issuer.href,
     service_documentation: options.serviceDocumentationUrl?.href,
 
-    authorization_endpoint: new URL(authorization_endpoint, baseUrl || issuer).href,
+    authorization_endpoint: new URL(authorization_endpoint, baseUrl || issuer)
+      .href,
     response_types_supported: ["code"],
     code_challenge_methods_supported: ["S256"],
 
@@ -92,14 +115,20 @@ export const createOAuthMetadata = (options: {
 
     scopes_supported: options.scopesSupported,
 
-    revocation_endpoint: revocation_endpoint ? new URL(revocation_endpoint, baseUrl || issuer).href : undefined,
-    revocation_endpoint_auth_methods_supported: revocation_endpoint ? ["client_secret_post"] : undefined,
+    revocation_endpoint: revocation_endpoint
+      ? new URL(revocation_endpoint, baseUrl || issuer).href
+      : undefined,
+    revocation_endpoint_auth_methods_supported: revocation_endpoint
+      ? ["client_secret_post"]
+      : undefined,
 
-    registration_endpoint: registration_endpoint ? new URL(registration_endpoint, baseUrl || issuer).href : undefined,
+    registration_endpoint: registration_endpoint
+      ? new URL(registration_endpoint, baseUrl || issuer).href
+      : undefined,
   };
 
-  return metadata
-}
+  return metadata;
+};
 
 /**
  * Installs standard MCP authorization server endpoints, including dynamic client registration and token revocation (if supported).
@@ -120,22 +149,27 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
 
   router.use(
     new URL(oauthMetadata.authorization_endpoint).pathname,
-    authorizationHandler({ provider: options.provider, ...options.authorizationOptions })
+    authorizationHandler({
+      provider: options.provider,
+      ...options.authorizationOptions,
+    }),
   );
 
   router.use(
     new URL(oauthMetadata.token_endpoint).pathname,
-    tokenHandler({ provider: options.provider, ...options.tokenOptions })
+    tokenHandler({ provider: options.provider, ...options.tokenOptions }),
   );
 
-  router.use(mcpAuthMetadataRouter({
-    oauthMetadata,
-    // This router is used for AS+RS combo's, so the issuer is also the resource server
-    resourceServerUrl: new URL(oauthMetadata.issuer),
-    serviceDocumentationUrl: options.serviceDocumentationUrl,
-    scopesSupported: options.scopesSupported,
-    resourceName: options.resourceName
-  }));
+  router.use(
+    mcpAuthMetadataRouter({
+      oauthMetadata,
+      // This router is used for AS+RS combo's, so the issuer is also the resource server
+      resourceServerUrl: new URL(oauthMetadata.issuer),
+      serviceDocumentationUrl: options.serviceDocumentationUrl,
+      scopesSupported: options.scopesSupported,
+      resourceName: options.resourceName,
+    }),
+  );
 
   if (oauthMetadata.registration_endpoint) {
     router.use(
@@ -143,14 +177,17 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
       clientRegistrationHandler({
         clientsStore: options.provider.clientsStore,
         ...options.clientRegistrationOptions,
-      })
+      }),
     );
   }
 
   if (oauthMetadata.revocation_endpoint) {
     router.use(
       new URL(oauthMetadata.revocation_endpoint).pathname,
-      revocationHandler({ provider: options.provider, ...options.revocationOptions })
+      revocationHandler({
+        provider: options.provider,
+        ...options.revocationOptions,
+      }),
     );
   }
 
@@ -183,9 +220,11 @@ export type AuthMetadataOptions = {
    * An optional resource name to display in resource metadata
    */
   resourceName?: string;
-}
+};
 
-export function mcpAuthMetadataRouter(options: AuthMetadataOptions) {
+export function mcpAuthMetadataRouter(
+  options: AuthMetadataOptions,
+): express.Router {
   checkIssuerUrl(new URL(options.oauthMetadata.issuer));
 
   const router = express.Router();
@@ -193,19 +232,23 @@ export function mcpAuthMetadataRouter(options: AuthMetadataOptions) {
   const protectedResourceMetadata: OAuthProtectedResourceMetadata = {
     resource: options.resourceServerUrl.href,
 
-    authorization_servers: [
-      options.oauthMetadata.issuer
-    ],
+    authorization_servers: [options.oauthMetadata.issuer],
 
     scopes_supported: options.scopesSupported,
     resource_name: options.resourceName,
     resource_documentation: options.serviceDocumentationUrl?.href,
   };
 
-  router.use("/.well-known/oauth-protected-resource", metadataHandler(protectedResourceMetadata));
+  router.use(
+    "/.well-known/oauth-protected-resource",
+    metadataHandler(protectedResourceMetadata),
+  );
 
   // Always add this for backwards compatibility
-  router.use("/.well-known/oauth-authorization-server", metadataHandler(options.oauthMetadata));
+  router.use(
+    "/.well-known/oauth-authorization-server",
+    metadataHandler(options.oauthMetadata),
+  );
 
   return router;
 }
@@ -222,5 +265,5 @@ export function mcpAuthMetadataRouter(options: AuthMetadataOptions) {
  * // Returns: 'https://api.example.com/.well-known/oauth-protected-resource'
  */
 export function getOAuthProtectedResourceMetadataUrl(serverUrl: URL): string {
-  return new URL('/.well-known/oauth-protected-resource', serverUrl).href;
+  return new URL("/.well-known/oauth-protected-resource", serverUrl).href;
 }

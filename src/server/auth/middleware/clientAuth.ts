@@ -2,14 +2,19 @@ import { z } from "zod";
 import { RequestHandler } from "express";
 import { OAuthRegisteredClientsStore } from "../clients.js";
 import { OAuthClientInformationFull } from "../../../shared/auth.js";
-import { InvalidRequestError, InvalidClientError, ServerError, OAuthError } from "../errors.js";
+import {
+  InvalidRequestError,
+  InvalidClientError,
+  ServerError,
+  OAuthError,
+} from "../errors.js";
 
 export type ClientAuthenticationMiddlewareOptions = {
   /**
    * A store used to read information about registered OAuth clients.
    */
   clientsStore: OAuthRegisteredClientsStore;
-}
+};
 
 const ClientAuthenticatedRequestSchema = z.object({
   client_id: z.string(),
@@ -25,7 +30,9 @@ declare module "express-serve-static-core" {
   }
 }
 
-export function authenticateClient({ clientsStore }: ClientAuthenticationMiddlewareOptions): RequestHandler {
+export function authenticateClient({
+  clientsStore,
+}: ClientAuthenticationMiddlewareOptions): RequestHandler {
   return async (req, res, next) => {
     try {
       const result = ClientAuthenticatedRequestSchema.safeParse(req.body);
@@ -52,12 +59,15 @@ export function authenticateClient({ clientsStore }: ClientAuthenticationMiddlew
         }
 
         // Check if client_secret has expired
-        if (client.client_secret_expires_at && client.client_secret_expires_at < Math.floor(Date.now() / 1000)) {
+        if (
+          client.client_secret_expires_at &&
+          client.client_secret_expires_at < Math.floor(Date.now() / 1000)
+        ) {
           throw new InvalidClientError("Client secret has expired");
         }
       }
 
-      req.client = client;
+      (req as any).client = client;
       next();
     } catch (error) {
       if (error instanceof OAuthError) {
@@ -68,5 +78,5 @@ export function authenticateClient({ clientsStore }: ClientAuthenticationMiddlew
         res.status(500).json(serverError.toResponseObject());
       }
     }
-  }
+  };
 }

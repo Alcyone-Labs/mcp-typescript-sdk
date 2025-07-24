@@ -1,24 +1,34 @@
-import { createServer, type Server, IncomingMessage, ServerResponse } from "node:http";
+import {
+  createServer,
+  type Server,
+  IncomingMessage,
+  ServerResponse,
+} from "node:http";
 import { createServer as netCreateServer, AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
-import { EventStore, StreamableHTTPServerTransport, EventId, StreamId } from "./streamableHttp.js";
+import {
+  EventStore,
+  StreamableHTTPServerTransport,
+  EventId,
+  StreamId,
+} from "./streamableHttp.js";
 import { McpServer } from "./mcp.js";
-import { CallToolResult, JSONRPCMessage } from "../types.js";
+import { CallToolResult, JSONRPCMessage, JSONRPCRequest } from "../types.js";
 import { z } from "zod";
 import { AuthInfo } from "./auth/types.js";
 
 async function getFreePort() {
-  return new Promise(res => {
+  return new Promise((res) => {
     const srv = netCreateServer();
     srv.listen(0, () => {
-      const address = srv.address()!
+      const address = srv.address()!;
       if (typeof address === "string") {
         throw new Error("Unexpected address type: " + typeof address);
       }
       const port = (address as AddressInfo).port;
-      srv.close((_err) => res(port))
+      srv.close((_err) => res(port));
     });
-  })
+  });
 }
 
 /**
@@ -27,7 +37,11 @@ async function getFreePort() {
 interface TestServerConfig {
   sessionIdGenerator: (() => string) | undefined;
   enableJsonResponse?: boolean;
-  customRequestHandler?: (req: IncomingMessage, res: ServerResponse, parsedBody?: unknown) => Promise<void>;
+  customRequestHandler?: (
+    req: IncomingMessage,
+    res: ServerResponse,
+    parsedBody?: unknown,
+  ) => Promise<void>;
   eventStore?: EventStore;
   onsessioninitialized?: (sessionId: string) => void | Promise<void>;
   onsessionclosed?: (sessionId: string) => void | Promise<void>;
@@ -36,7 +50,9 @@ interface TestServerConfig {
 /**
  * Helper to create and start test HTTP server with MCP setup
  */
-async function createTestServer(config: TestServerConfig = { sessionIdGenerator: (() => randomUUID()) }): Promise<{
+async function createTestServer(
+  config: TestServerConfig = { sessionIdGenerator: () => randomUUID() },
+): Promise<{
   server: Server;
   transport: StreamableHTTPServerTransport;
   mcpServer: McpServer;
@@ -44,7 +60,7 @@ async function createTestServer(config: TestServerConfig = { sessionIdGenerator:
 }> {
   const mcpServer = new McpServer(
     { name: "test-server", version: "1.0.0" },
-    { capabilities: { logging: {} } }
+    { capabilities: { logging: {} } },
   );
 
   mcpServer.tool(
@@ -53,7 +69,7 @@ async function createTestServer(config: TestServerConfig = { sessionIdGenerator:
     { name: z.string().describe("Name to greet") },
     async ({ name }): Promise<CallToolResult> => {
       return { content: [{ type: "text", text: `Hello, ${name}!` }] };
-    }
+    },
   );
 
   const transport = new StreamableHTTPServerTransport({
@@ -61,7 +77,7 @@ async function createTestServer(config: TestServerConfig = { sessionIdGenerator:
     enableJsonResponse: config.enableJsonResponse ?? false,
     eventStore: config.eventStore,
     onsessioninitialized: config.onsessioninitialized,
-    onsessionclosed: config.onsessionclosed
+    onsessionclosed: config.onsessionclosed,
   });
 
   await mcpServer.connect(transport);
@@ -92,7 +108,9 @@ async function createTestServer(config: TestServerConfig = { sessionIdGenerator:
 /**
  * Helper to create and start authenticated test HTTP server with MCP setup
  */
-async function createTestAuthServer(config: TestServerConfig = { sessionIdGenerator: (() => randomUUID()) }): Promise<{
+async function createTestAuthServer(
+  config: TestServerConfig = { sessionIdGenerator: () => randomUUID() },
+): Promise<{
   server: Server;
   transport: StreamableHTTPServerTransport;
   mcpServer: McpServer;
@@ -100,7 +118,7 @@ async function createTestAuthServer(config: TestServerConfig = { sessionIdGenera
 }> {
   const mcpServer = new McpServer(
     { name: "test-server", version: "1.0.0" },
-    { capabilities: { logging: {} } }
+    { capabilities: { logging: {} } },
   );
 
   mcpServer.tool(
@@ -108,8 +126,15 @@ async function createTestAuthServer(config: TestServerConfig = { sessionIdGenera
     "A user profile data tool",
     { active: z.boolean().describe("Profile status") },
     async ({ active }, { authInfo }): Promise<CallToolResult> => {
-      return { content: [{ type: "text", text: `${active ? 'Active' : 'Inactive'} profile from token: ${authInfo?.token}!` }] };
-    }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${active ? "Active" : "Inactive"} profile from token: ${authInfo?.token}!`,
+          },
+        ],
+      };
+    },
   );
 
   const transport = new StreamableHTTPServerTransport({
@@ -117,24 +142,28 @@ async function createTestAuthServer(config: TestServerConfig = { sessionIdGenera
     enableJsonResponse: config.enableJsonResponse ?? false,
     eventStore: config.eventStore,
     onsessioninitialized: config.onsessioninitialized,
-    onsessionclosed: config.onsessionclosed
+    onsessionclosed: config.onsessionclosed,
   });
 
   await mcpServer.connect(transport);
 
-  const server = createServer(async (req: IncomingMessage & { auth?: AuthInfo }, res) => {
-    try {
-      if (config.customRequestHandler) {
-        await config.customRequestHandler(req, res);
-      } else {
-        req.auth = { token: req.headers["authorization"]?.split(" ")[1] } as AuthInfo;
-        await transport.handleRequest(req, res);
+  const server = createServer(
+    async (req: IncomingMessage & { auth?: AuthInfo }, res) => {
+      try {
+        if (config.customRequestHandler) {
+          await config.customRequestHandler(req, res);
+        } else {
+          req.auth = {
+            token: req.headers["authorization"]?.split(" ")[1],
+          } as AuthInfo;
+          await transport.handleRequest(req, res);
+        }
+      } catch (error) {
+        console.error("Error handling request:", error);
+        if (!res.headersSent) res.writeHead(500).end();
       }
-    } catch (error) {
-      console.error("Error handling request:", error);
-      if (!res.headersSent) res.writeHead(500).end();
-    }
-  });
+    },
+  );
 
   const baseUrl = await new Promise<URL>((resolve) => {
     server.listen(0, "127.0.0.1", () => {
@@ -149,7 +178,13 @@ async function createTestAuthServer(config: TestServerConfig = { sessionIdGenera
 /**
  * Helper to stop test server
  */
-async function stopTestServer({ server, transport }: { server: Server; transport: StreamableHTTPServerTransport }): Promise<void> {
+async function stopTestServer({
+  server,
+  transport,
+}: {
+  server: Server;
+  transport: StreamableHTTPServerTransport;
+}): Promise<void> {
   // First close the transport to ensure all SSE streams are closed
   await transport.close();
 
@@ -167,19 +202,18 @@ const TEST_MESSAGES = {
     params: {
       clientInfo: { name: "test-client", version: "1.0" },
       protocolVersion: "2025-03-26",
-      capabilities: {
-      },
+      capabilities: {},
     },
 
     id: "init-1",
-  } as JSONRPCMessage,
+  } as JSONRPCRequest,
 
   toolsList: {
     jsonrpc: "2.0",
     method: "tools/list",
     params: {},
     id: "tools-1",
-  } as JSONRPCMessage
+  } as JSONRPCRequest,
 };
 
 /**
@@ -196,11 +230,16 @@ async function readSSEEvent(response: Response): Promise<string> {
 /**
  * Helper to send JSON-RPC request
  */
-async function sendPostRequest(baseUrl: URL, message: JSONRPCMessage | JSONRPCMessage[], sessionId?: string, extraHeaders?: Record<string, string>): Promise<Response> {
+async function sendPostRequest(
+  baseUrl: URL,
+  message: JSONRPCMessage | JSONRPCMessage[],
+  sessionId?: string,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
-    ...extraHeaders
+    ...extraHeaders,
   };
 
   if (sessionId) {
@@ -216,7 +255,11 @@ async function sendPostRequest(baseUrl: URL, message: JSONRPCMessage | JSONRPCMe
   });
 }
 
-function expectErrorResponse(data: unknown, expectedCode: number, expectedMessagePattern: RegExp): void {
+function expectErrorResponse(
+  data: unknown,
+  expectedCode: number,
+  expectedMessagePattern: RegExp,
+): void {
   expect(data).toMatchObject({
     jsonrpc: "2.0",
     error: expect.objectContaining({
@@ -270,7 +313,7 @@ describe("StreamableHTTPServerTransport", () => {
     // Try second initialize
     const secondInitMessage = {
       ...TEST_MESSAGES.initialize,
-      id: "second-init"
+      id: "second-init",
     };
 
     const response = await sendPostRequest(baseUrl, secondInitMessage);
@@ -291,20 +334,28 @@ describe("StreamableHTTPServerTransport", () => {
           protocolVersion: "2025-03-26",
         },
         id: "init-2",
-      }
+      },
     ];
 
     const response = await sendPostRequest(baseUrl, batchInitMessages);
 
     expect(response.status).toBe(400);
     const errorData = await response.json();
-    expectErrorResponse(errorData, -32600, /Only one initialization request is allowed/);
+    expectErrorResponse(
+      errorData,
+      -32600,
+      /Only one initialization request is allowed/,
+    );
   });
 
   it("should handle post requests via sse response correctly", async () => {
     sessionId = await initializeServer();
 
-    const response = await sendPostRequest(baseUrl, TEST_MESSAGES.toolsList, sessionId);
+    const response = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.toolsList,
+      sessionId,
+    );
 
     expect(response.status).toBe(200);
 
@@ -313,7 +364,7 @@ describe("StreamableHTTPServerTransport", () => {
 
     // Parse the SSE event
     const eventLines = text.split("\n");
-    const dataLine = eventLines.find(line => line.startsWith("data:"));
+    const dataLine = eventLines.find((line) => line.startsWith("data:"));
     expect(dataLine).toBeDefined();
 
     const eventData = JSON.parse(dataLine!.substring(5));
@@ -351,7 +402,7 @@ describe("StreamableHTTPServerTransport", () => {
 
     const text = await readSSEEvent(response);
     const eventLines = text.split("\n");
-    const dataLine = eventLines.find(line => line.startsWith("data:"));
+    const dataLine = eventLines.find((line) => line.startsWith("data:"));
     expect(dataLine).toBeDefined();
 
     const eventData = JSON.parse(dataLine!.substring(5));
@@ -380,8 +431,13 @@ describe("StreamableHTTPServerTransport", () => {
       "A simple test tool with request info",
       { name: z.string().describe("Name to greet") },
       async ({ name }, { requestInfo }): Promise<CallToolResult> => {
-        return { content: [{ type: "text", text: `Hello, ${name}!` }, { type: "text", text: `${JSON.stringify(requestInfo)}` }] };
-      }
+        return {
+          content: [
+            { type: "text", text: `Hello, ${name}!` },
+            { type: "text", text: `${JSON.stringify(requestInfo)}` },
+          ],
+        };
+      },
     );
 
     const toolCallMessage: JSONRPCMessage = {
@@ -401,7 +457,7 @@ describe("StreamableHTTPServerTransport", () => {
 
     const text = await readSSEEvent(response);
     const eventLines = text.split("\n");
-    const dataLine = eventLines.find(line => line.startsWith("data:"));
+    const dataLine = eventLines.find((line) => line.startsWith("data:"));
     expect(dataLine).toBeDefined();
 
     const eventData = JSON.parse(dataLine!.substring(5));
@@ -411,7 +467,7 @@ describe("StreamableHTTPServerTransport", () => {
       result: {
         content: [
           { type: "text", text: "Hello, Test User!" },
-          { type: "text", text: expect.any(String) }
+          { type: "text", text: expect.any(String) },
         ],
       },
       id: "call-1",
@@ -420,14 +476,14 @@ describe("StreamableHTTPServerTransport", () => {
     const requestInfo = JSON.parse(eventData.result.content[1].text);
     expect(requestInfo).toMatchObject({
       headers: {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        connection: 'keep-alive',
-        'mcp-session-id': sessionId,
-        'accept-language': '*',
-        'user-agent': expect.any(String),
-        'accept-encoding': expect.any(String),
-        'content-length': expect.any(String),
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        connection: "keep-alive",
+        "mcp-session-id": sessionId,
+        "accept-language": "*",
+        "user-agent": expect.any(String),
+        "accept-encoding": expect.any(String),
+        "content-length": expect.any(String),
       },
     });
   });
@@ -446,7 +502,11 @@ describe("StreamableHTTPServerTransport", () => {
     await initializeServer();
 
     // Now try with invalid session ID
-    const response = await sendPostRequest(baseUrl, TEST_MESSAGES.toolsList, "invalid-session-id");
+    const response = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.toolsList,
+      "invalid-session-id",
+    );
 
     expect(response.status).toBe(404);
     const errorData = await response.json();
@@ -457,7 +517,7 @@ describe("StreamableHTTPServerTransport", () => {
     // First initialize to get a session ID
     sessionId = await initializeServer();
 
-    // Open a standalone SSE stream  
+    // Open a standalone SSE stream
     const sseResponse = await fetch(baseUrl, {
       method: "GET",
       headers: {
@@ -469,7 +529,6 @@ describe("StreamableHTTPServerTransport", () => {
 
     expect(sseResponse.status).toBe(200);
     expect(sseResponse.headers.get("content-type")).toBe("text/event-stream");
-
 
     // Send a notification (server-initiated message) that should appear on SSE stream
     const notification: JSONRPCMessage = {
@@ -485,7 +544,7 @@ describe("StreamableHTTPServerTransport", () => {
     const text = await readSSEEvent(sseResponse);
 
     const eventLines = text.split("\n");
-    const dataLine = eventLines.find(line => line.startsWith("data:"));
+    const dataLine = eventLines.find((line) => line.startsWith("data:"));
     expect(dataLine).toBeDefined();
 
     const eventData = JSON.parse(dataLine!.substring(5));
@@ -516,7 +575,7 @@ describe("StreamableHTTPServerTransport", () => {
     const notification1: JSONRPCMessage = {
       jsonrpc: "2.0",
       method: "notifications/message",
-      params: { level: "info", data: "First notification" }
+      params: { level: "info", data: "First notification" },
     };
 
     // Just send one and verify it comes through - then the stream should stay open
@@ -525,7 +584,7 @@ describe("StreamableHTTPServerTransport", () => {
     const { value, done } = await reader!.read();
     const text = new TextDecoder().decode(value);
     expect(text).toContain("First notification");
-    expect(done).toBe(false);  // Stream should still be open
+    expect(done).toBe(false); // Stream should still be open
   });
 
   it("should reject second SSE stream for the same session", async () => {
@@ -556,7 +615,11 @@ describe("StreamableHTTPServerTransport", () => {
     // Should be rejected
     expect(secondStream.status).toBe(409); // Conflict
     const errorData = await secondStream.json();
-    expectErrorResponse(errorData, -32000, /Only one SSE stream is allowed per session/);
+    expectErrorResponse(
+      errorData,
+      -32000,
+      /Only one SSE stream is allowed per session/,
+    );
   });
 
   it("should reject GET requests without Accept: text/event-stream header", async () => {
@@ -574,7 +637,11 @@ describe("StreamableHTTPServerTransport", () => {
 
     expect(response.status).toBe(406);
     const errorData = await response.json();
-    expectErrorResponse(errorData, -32000, /Client must accept text\/event-stream/);
+    expectErrorResponse(
+      errorData,
+      -32000,
+      /Client must accept text\/event-stream/,
+    );
   });
 
   it("should reject POST requests without proper Accept header", async () => {
@@ -585,7 +652,7 @@ describe("StreamableHTTPServerTransport", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",  // Missing text/event-stream
+        Accept: "application/json", // Missing text/event-stream
         "mcp-session-id": sessionId,
       },
       body: JSON.stringify(TEST_MESSAGES.toolsList),
@@ -593,7 +660,11 @@ describe("StreamableHTTPServerTransport", () => {
 
     expect(response.status).toBe(406);
     const errorData = await response.json();
-    expectErrorResponse(errorData, -32000, /Client must accept both application\/json and text\/event-stream/);
+    expectErrorResponse(
+      errorData,
+      -32000,
+      /Client must accept both application\/json and text\/event-stream/,
+    );
   });
 
   it("should reject unsupported Content-Type", async () => {
@@ -612,7 +683,11 @@ describe("StreamableHTTPServerTransport", () => {
 
     expect(response.status).toBe(415);
     const errorData = await response.json();
-    expectErrorResponse(errorData, -32000, /Content-Type must be application\/json/);
+    expectErrorResponse(
+      errorData,
+      -32000,
+      /Content-Type must be application\/json/,
+    );
   });
 
   it("should handle JSON-RPC batch notification messages with 202 response", async () => {
@@ -623,7 +698,11 @@ describe("StreamableHTTPServerTransport", () => {
       { jsonrpc: "2.0", method: "someNotification1", params: {} },
       { jsonrpc: "2.0", method: "someNotification2", params: {} },
     ];
-    const response = await sendPostRequest(baseUrl, batchNotifications, sessionId);
+    const response = await sendPostRequest(
+      baseUrl,
+      batchNotifications,
+      sessionId,
+    );
 
     expect(response.status).toBe(202);
   });
@@ -634,7 +713,12 @@ describe("StreamableHTTPServerTransport", () => {
     // Send batch of requests
     const batchRequests: JSONRPCMessage[] = [
       { jsonrpc: "2.0", method: "tools/list", params: {}, id: "req-1" },
-      { jsonrpc: "2.0", method: "tools/call", params: { name: "greet", arguments: { name: "BatchUser" } }, id: "req-2" },
+      {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "greet", arguments: { name: "BatchUser" } },
+        id: "req-2",
+      },
     ];
     const response = await sendPostRequest(baseUrl, batchRequests, sessionId);
 
@@ -651,7 +735,7 @@ describe("StreamableHTTPServerTransport", () => {
     expect(text).toContain('"id":"req-1"');
     expect(text).toContain('"tools"'); // tools/list result
     expect(text).toContain('"id":"req-2"');
-    expect(text).toContain('Hello, BatchUser'); // tools/call result
+    expect(text).toContain("Hello, BatchUser"); // tools/call result
   });
 
   it("should properly handle invalid JSON data", async () => {
@@ -678,7 +762,11 @@ describe("StreamableHTTPServerTransport", () => {
 
     // Invalid JSON-RPC (missing required jsonrpc version)
     const invalidMessage = { method: "tools/list", params: {}, id: 1 }; // missing jsonrpc version
-    const response = await sendPostRequest(baseUrl, invalidMessage as JSONRPCMessage, sessionId);
+    const response = await sendPostRequest(
+      baseUrl,
+      invalidMessage as JSONRPCMessage,
+      sessionId,
+    );
 
     expect(response.status).toBe(400);
     const errorData = await response.json();
@@ -690,7 +778,11 @@ describe("StreamableHTTPServerTransport", () => {
 
   it("should reject requests to uninitialized server", async () => {
     // Create a new HTTP server and transport without initializing
-    const { server: uninitializedServer, transport: uninitializedTransport, baseUrl: uninitializedUrl } = await createTestServer();
+    const {
+      server: uninitializedServer,
+      transport: uninitializedTransport,
+      baseUrl: uninitializedUrl,
+    } = await createTestServer();
     // Transport not used in test but needed for cleanup
 
     // No initialization, just send a request directly
@@ -702,14 +794,21 @@ describe("StreamableHTTPServerTransport", () => {
     };
 
     // Send a request to uninitialized server
-    const response = await sendPostRequest(uninitializedUrl, uninitializedMessage, "any-session-id");
+    const response = await sendPostRequest(
+      uninitializedUrl,
+      uninitializedMessage,
+      "any-session-id",
+    );
 
     expect(response.status).toBe(400);
     const errorData = await response.json();
     expectErrorResponse(errorData, -32000, /Server not initialized/);
 
     // Cleanup
-    await stopTestServer({ server: uninitializedServer, transport: uninitializedTransport });
+    await stopTestServer({
+      server: uninitializedServer,
+      transport: uninitializedTransport,
+    });
   });
 
   it("should send response messages to the connection that sent the request", async () => {
@@ -719,7 +818,7 @@ describe("StreamableHTTPServerTransport", () => {
       jsonrpc: "2.0",
       method: "tools/list",
       params: {},
-      id: "req-1"
+      id: "req-1",
     };
 
     const message2: JSONRPCMessage = {
@@ -727,9 +826,9 @@ describe("StreamableHTTPServerTransport", () => {
       method: "tools/call",
       params: {
         name: "greet",
-        arguments: { name: "Connection2" }
+        arguments: { name: "Connection2" },
       },
-      id: "req-2"
+      id: "req-2",
     };
 
     // Make two concurrent fetch connections for different requests
@@ -745,12 +844,12 @@ describe("StreamableHTTPServerTransport", () => {
     const { value: value1 } = await reader1!.read();
     const text1 = new TextDecoder().decode(value1);
     expect(text1).toContain('"id":"req-1"');
-    expect(text1).toContain('"tools"');  // tools/list result
+    expect(text1).toContain('"tools"'); // tools/list result
 
     const { value: value2 } = await reader2!.read();
     const text2 = new TextDecoder().decode(value2);
     expect(text2).toContain('"id":"req-2"');
-    expect(text2).toContain('Hello, Connection2');  // tools/call result
+    expect(text2).toContain("Hello, Connection2"); // tools/call result
   });
 
   it("should keep stream open after sending server notifications", async () => {
@@ -792,7 +891,10 @@ describe("StreamableHTTPServerTransport", () => {
     const tempUrl = tempResult.baseUrl;
 
     // Initialize to get a session ID
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
 
     // Now DELETE the session
@@ -833,7 +935,11 @@ describe("StreamableHTTPServerTransport", () => {
       sessionId = await initializeServer();
 
       // Send request with matching protocol version
-      const response = await sendPostRequest(baseUrl, TEST_MESSAGES.toolsList, sessionId);
+      const response = await sendPostRequest(
+        baseUrl,
+        TEST_MESSAGES.toolsList,
+        sessionId,
+      );
 
       expect(response.status).toBe(200);
     });
@@ -873,14 +979,18 @@ describe("StreamableHTTPServerTransport", () => {
 
       expect(response.status).toBe(400);
       const errorData = await response.json();
-      expectErrorResponse(errorData, -32000, /Bad Request: Unsupported protocol version \(supported versions: .+\)/);
+      expectErrorResponse(
+        errorData,
+        -32000,
+        /Bad Request: Unsupported protocol version \(supported versions: .+\)/,
+      );
     });
 
     it("should accept when protocol version differs from negotiated version", async () => {
       sessionId = await initializeServer();
 
       // Spy on console.warn to verify warning is logged
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation();
 
       // Send request with different but supported protocol version
       const response = await fetch(baseUrl, {
@@ -915,7 +1025,11 @@ describe("StreamableHTTPServerTransport", () => {
 
       expect(response.status).toBe(400);
       const errorData = await response.json();
-      expectErrorResponse(errorData, -32000, /Bad Request: Unsupported protocol version \(supported versions: .+\)/);
+      expectErrorResponse(
+        errorData,
+        -32000,
+        /Bad Request: Unsupported protocol version \(supported versions: .+\)/,
+      );
     });
 
     it("should handle protocol version validation for DELETE requests", async () => {
@@ -932,7 +1046,11 @@ describe("StreamableHTTPServerTransport", () => {
 
       expect(response.status).toBe(400);
       const errorData = await response.json();
-      expectErrorResponse(errorData, -32000, /Bad Request: Unsupported protocol version \(supported versions: .+\)/);
+      expectErrorResponse(
+        errorData,
+        -32000,
+        /Bad Request: Unsupported protocol version \(supported versions: .+\)/,
+      );
     });
   });
 });
@@ -976,12 +1094,17 @@ describe("StreamableHTTPServerTransport with AuthInfo", () => {
       id: "call-1",
     };
 
-    const response = await sendPostRequest(baseUrl, toolCallMessage, sessionId, { 'authorization': 'Bearer test-token' });
+    const response = await sendPostRequest(
+      baseUrl,
+      toolCallMessage,
+      sessionId,
+      { authorization: "Bearer test-token" },
+    );
     expect(response.status).toBe(200);
 
     const text = await readSSEEvent(response);
     const eventLines = text.split("\n");
-    const dataLine = eventLines.find(line => line.startsWith("data:"));
+    const dataLine = eventLines.find((line) => line.startsWith("data:"));
     expect(dataLine).toBeDefined();
 
     const eventData = JSON.parse(dataLine!.substring(5));
@@ -1017,7 +1140,7 @@ describe("StreamableHTTPServerTransport with AuthInfo", () => {
 
     const text = await readSSEEvent(response);
     const eventLines = text.split("\n");
-    const dataLine = eventLines.find(line => line.startsWith("data:"));
+    const dataLine = eventLines.find((line) => line.startsWith("data:"));
     expect(dataLine).toBeDefined();
 
     const eventData = JSON.parse(dataLine!.substring(5));
@@ -1044,13 +1167,19 @@ describe("StreamableHTTPServerTransport with JSON Response Mode", () => {
   let sessionId: string;
 
   beforeEach(async () => {
-    const result = await createTestServer({ sessionIdGenerator: (() => randomUUID()), enableJsonResponse: true });
+    const result = await createTestServer({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
+    });
     server = result.server;
     transport = result.transport;
     baseUrl = result.baseUrl;
 
     // Initialize and get session ID
-    const initResponse = await sendPostRequest(baseUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.initialize,
+    );
 
     sessionId = initResponse.headers.get("mcp-session-id") as string;
   });
@@ -1067,7 +1196,11 @@ describe("StreamableHTTPServerTransport with JSON Response Mode", () => {
       id: "json-req-1",
     };
 
-    const response = await sendPostRequest(baseUrl, toolsListMessage, sessionId);
+    const response = await sendPostRequest(
+      baseUrl,
+      toolsListMessage,
+      sessionId,
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/json");
@@ -1077,17 +1210,22 @@ describe("StreamableHTTPServerTransport with JSON Response Mode", () => {
       jsonrpc: "2.0",
       result: expect.objectContaining({
         tools: expect.arrayContaining([
-          expect.objectContaining({ name: "greet" })
-        ])
+          expect.objectContaining({ name: "greet" }),
+        ]),
       }),
-      id: "json-req-1"
+      id: "json-req-1",
     });
   });
 
   it("should return JSON response for batch requests", async () => {
     const batchMessages: JSONRPCMessage[] = [
       { jsonrpc: "2.0", method: "tools/list", params: {}, id: "batch-1" },
-      { jsonrpc: "2.0", method: "tools/call", params: { name: "greet", arguments: { name: "JSON" } }, id: "batch-2" }
+      {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "greet", arguments: { name: "JSON" } },
+        id: "batch-2",
+      },
     ];
 
     const response = await sendPostRequest(baseUrl, batchMessages, sessionId);
@@ -1100,28 +1238,36 @@ describe("StreamableHTTPServerTransport with JSON Response Mode", () => {
     expect(results).toHaveLength(2);
 
     // Batch responses can come in any order
-    const listResponse = results.find((r: { id?: string }) => r.id === "batch-1");
-    const callResponse = results.find((r: { id?: string }) => r.id === "batch-2");
+    const listResponse = results.find(
+      (r: { id?: string }) => r.id === "batch-1",
+    );
+    const callResponse = results.find(
+      (r: { id?: string }) => r.id === "batch-2",
+    );
 
-    expect(listResponse).toEqual(expect.objectContaining({
-      jsonrpc: "2.0",
-      id: "batch-1",
-      result: expect.objectContaining({
-        tools: expect.arrayContaining([
-          expect.objectContaining({ name: "greet" })
-        ])
-      })
-    }));
+    expect(listResponse).toEqual(
+      expect.objectContaining({
+        jsonrpc: "2.0",
+        id: "batch-1",
+        result: expect.objectContaining({
+          tools: expect.arrayContaining([
+            expect.objectContaining({ name: "greet" }),
+          ]),
+        }),
+      }),
+    );
 
-    expect(callResponse).toEqual(expect.objectContaining({
-      jsonrpc: "2.0",
-      id: "batch-2",
-      result: expect.objectContaining({
-        content: expect.arrayContaining([
-          expect.objectContaining({ type: "text", text: "Hello, JSON!" })
-        ])
-      })
-    }));
+    expect(callResponse).toEqual(
+      expect.objectContaining({
+        jsonrpc: "2.0",
+        id: "batch-2",
+        result: expect.objectContaining({
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: "text", text: "Hello, JSON!" }),
+          ]),
+        }),
+      }),
+    );
   });
 });
 
@@ -1148,7 +1294,7 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
           if (!res.headersSent) res.writeHead(500).end();
         }
       },
-      sessionIdGenerator: (() => randomUUID())
+      sessionIdGenerator: () => randomUUID(),
     });
 
     server = result.server;
@@ -1156,7 +1302,10 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
     baseUrl = result.baseUrl;
 
     // Initialize and get session ID
-    const initResponse = await sendPostRequest(baseUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.initialize,
+    );
     sessionId = initResponse.headers.get("mcp-session-id") as string;
   });
 
@@ -1173,7 +1322,7 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
       id: "preparsed-1",
     };
 
-    // Send an empty body since we'll use pre-parsed body  
+    // Send an empty body since we'll use pre-parsed body
     const response = await fetch(baseUrl, {
       method: "POST",
       headers: {
@@ -1182,7 +1331,7 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
         "mcp-session-id": sessionId,
       },
       // Empty body - we're testing pre-parsed body
-      body: ""
+      body: "",
     });
 
     expect(response.status).toBe(200);
@@ -1200,7 +1349,12 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
   it("should handle pre-parsed batch messages", async () => {
     parsedBody = [
       { jsonrpc: "2.0", method: "tools/list", params: {}, id: "batch-1" },
-      { jsonrpc: "2.0", method: "tools/call", params: { name: "greet", arguments: { name: "PreParsed" } }, id: "batch-2" }
+      {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "greet", arguments: { name: "PreParsed" } },
+        id: "batch-2",
+      },
     ];
 
     const response = await fetch(baseUrl, {
@@ -1210,7 +1364,7 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
         Accept: "application/json, text/event-stream",
         "mcp-session-id": sessionId,
       },
-      body: "" // Empty as we're using pre-parsed
+      body: "", // Empty as we're using pre-parsed
     });
 
     expect(response.status).toBe(200);
@@ -1244,8 +1398,8 @@ describe("StreamableHTTPServerTransport with pre-parsed body", () => {
         jsonrpc: "2.0",
         method: "tools/call",
         params: { name: "greet", arguments: { name: "Ignored" } },
-        id: "ignored-id"
-      })
+        id: "ignored-id",
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -1268,21 +1422,31 @@ describe("StreamableHTTPServerTransport with resumability", () => {
   let baseUrl: URL;
   let sessionId: string;
   let mcpServer: McpServer;
-  const storedEvents: Map<string, { eventId: string, message: JSONRPCMessage }> = new Map();
+  const storedEvents: Map<
+    string,
+    { eventId: string; message: JSONRPCMessage }
+  > = new Map();
 
   // Simple implementation of EventStore
   const eventStore: EventStore = {
-
-    async storeEvent(streamId: string, message: JSONRPCMessage): Promise<string> {
+    async storeEvent(
+      streamId: string,
+      message: JSONRPCMessage,
+    ): Promise<string> {
       const eventId = `${streamId}_${randomUUID()}`;
       storedEvents.set(eventId, { eventId, message });
       return eventId;
     },
 
-    async replayEventsAfter(lastEventId: EventId, { send }: {
-      send: (eventId: EventId, message: JSONRPCMessage) => Promise<void>
-    }): Promise<StreamId> {
-      const streamId = lastEventId.split('_')[0];
+    async replayEventsAfter(
+      lastEventId: EventId,
+      {
+        send,
+      }: {
+        send: (eventId: EventId, message: JSONRPCMessage) => Promise<void>;
+      },
+    ): Promise<StreamId> {
+      const streamId = lastEventId.split("_")[0];
       // Extract stream ID from the event ID
       // For test simplicity, just return all events with matching streamId that aren't the lastEventId
       for (const [eventId, { message }] of storedEvents.entries()) {
@@ -1298,7 +1462,7 @@ describe("StreamableHTTPServerTransport with resumability", () => {
     storedEvents.clear();
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
-      eventStore
+      eventStore,
     });
 
     server = result.server;
@@ -1307,10 +1471,13 @@ describe("StreamableHTTPServerTransport with resumability", () => {
     mcpServer = result.mcpServer;
 
     // Verify resumability is enabled on the transport
-    expect((transport)['_eventStore']).toBeDefined();
+    expect(transport["_eventStore"]).toBeDefined();
 
     // Initialize the server
-    const initResponse = await sendPostRequest(baseUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.initialize,
+    );
     sessionId = initResponse.headers.get("mcp-session-id") as string;
     expect(sessionId).toBeDefined();
   });
@@ -1350,7 +1517,7 @@ describe("StreamableHTTPServerTransport with resumability", () => {
     const text = new TextDecoder().decode(value);
 
     // The response should contain an event ID
-    expect(text).toContain('id: ');
+    expect(text).toContain("id: ");
     expect(text).toContain('"method":"notifications/message"');
 
     // Extract the event ID
@@ -1361,10 +1528,9 @@ describe("StreamableHTTPServerTransport with resumability", () => {
     const eventId = idMatch![1];
     expect(storedEvents.has(eventId)).toBe(true);
     const storedEvent = storedEvents.get(eventId);
-    expect(eventId.startsWith('_GET_stream')).toBe(true);
+    expect(eventId.startsWith("_GET_stream")).toBe(true);
     expect(storedEvent?.message).toMatchObject(notification);
   });
-
 
   it("should store and replay MCP server tool notifications", async () => {
     // Establish a standalone SSE stream
@@ -1375,8 +1541,11 @@ describe("StreamableHTTPServerTransport with resumability", () => {
         "mcp-session-id": sessionId,
       },
     });
-    expect(sseResponse.status).toBe(200);   // Send a server notification through the MCP server
-    await mcpServer.server.sendLoggingMessage({ level: "info", data: "First notification from MCP server" });
+    expect(sseResponse.status).toBe(200); // Send a server notification through the MCP server
+    await mcpServer.server.sendLoggingMessage({
+      level: "info",
+      data: "First notification from MCP server",
+    });
 
     // Read the notification from the SSE stream
     const reader = sseResponse.body?.getReader();
@@ -1384,16 +1553,19 @@ describe("StreamableHTTPServerTransport with resumability", () => {
     const text = new TextDecoder().decode(value);
 
     // Verify the notification was sent with an event ID
-    expect(text).toContain('id: ');
-    expect(text).toContain('First notification from MCP server');
+    expect(text).toContain("id: ");
+    expect(text).toContain("First notification from MCP server");
 
     // Extract the event ID
     const idMatch = text.match(/id: ([^\n]+)/);
     expect(idMatch).toBeTruthy();
     const firstEventId = idMatch![1];
 
-    // Send a second notification 
-    await mcpServer.server.sendLoggingMessage({ level: "info", data: "Second notification from MCP server" });
+    // Send a second notification
+    await mcpServer.server.sendLoggingMessage({
+      level: "info",
+      data: "Second notification from MCP server",
+    });
 
     // Close the first SSE stream to simulate a disconnect
     await reader!.cancel();
@@ -1405,7 +1577,7 @@ describe("StreamableHTTPServerTransport with resumability", () => {
         Accept: "text/event-stream",
         "mcp-session-id": sessionId,
         "mcp-protocol-version": "2025-03-26",
-        "last-event-id": firstEventId
+        "last-event-id": firstEventId,
       },
     });
 
@@ -1417,8 +1589,8 @@ describe("StreamableHTTPServerTransport with resumability", () => {
     const reconnectText = new TextDecoder().decode(reconnectData.value);
 
     // Verify we received the second notification that was sent after our stored eventId
-    expect(reconnectText).toContain('Second notification from MCP server');
-    expect(reconnectText).toContain('id: ');
+    expect(reconnectText).toContain("Second notification from MCP server");
+    expect(reconnectText).toContain("id: ");
   });
 });
 
@@ -1441,14 +1613,20 @@ describe("StreamableHTTPServerTransport in stateless mode", () => {
 
   it("should operate without session ID validation", async () => {
     // Initialize the server first
-    const initResponse = await sendPostRequest(baseUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.initialize,
+    );
 
     expect(initResponse.status).toBe(200);
     // Should NOT have session ID header in stateless mode
     expect(initResponse.headers.get("mcp-session-id")).toBeNull();
 
     // Try request without session ID - should work in stateless mode
-    const toolsResponse = await sendPostRequest(baseUrl, TEST_MESSAGES.toolsList);
+    const toolsResponse = await sendPostRequest(
+      baseUrl,
+      TEST_MESSAGES.toolsList,
+    );
 
     expect(toolsResponse.status).toBe(200);
   });
@@ -1464,7 +1642,12 @@ describe("StreamableHTTPServerTransport in stateless mode", () => {
         Accept: "application/json, text/event-stream",
         "mcp-session-id": "random-id-1",
       },
-      body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", params: {}, id: "t1" }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/list",
+        params: {},
+        id: "t1",
+      }),
     });
     expect(response1.status).toBe(200);
 
@@ -1476,13 +1659,18 @@ describe("StreamableHTTPServerTransport in stateless mode", () => {
         Accept: "application/json, text/event-stream",
         "mcp-session-id": "different-id-2",
       },
-      body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", params: {}, id: "t2" }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/list",
+        params: {},
+        id: "t2",
+      }),
     });
     expect(response2.status).toBe(200);
   });
 
   it("should reject second SSE stream even in stateless mode", async () => {
-    // Despite no session ID requirement, the transport still only allows 
+    // Despite no session ID requirement, the transport still only allows
     // one standalone SSE stream at a time
 
     // Initialize the server first
@@ -1493,7 +1681,7 @@ describe("StreamableHTTPServerTransport in stateless mode", () => {
       method: "GET",
       headers: {
         Accept: "text/event-stream",
-        "mcp-protocol-version": "2025-03-26"
+        "mcp-protocol-version": "2025-03-26",
       },
     });
     expect(stream1.status).toBe(200);
@@ -1503,7 +1691,7 @@ describe("StreamableHTTPServerTransport in stateless mode", () => {
       method: "GET",
       headers: {
         Accept: "text/event-stream",
-        "mcp-protocol-version": "2025-03-26"
+        "mcp-protocol-version": "2025-03-26",
       },
     });
     expect(stream2.status).toBe(409); // Conflict - only one stream allowed
@@ -1514,18 +1702,21 @@ describe("StreamableHTTPServerTransport in stateless mode", () => {
 describe("StreamableHTTPServerTransport onsessionclosed callback", () => {
   it("should call onsessionclosed callback when session is closed via DELETE", async () => {
     const mockCallback = jest.fn();
-    
+
     // Create server with onsessionclosed callback
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessionclosed: mockCallback,
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to get a session ID
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
     expect(tempSessionId).toBeDefined();
 
@@ -1551,12 +1742,15 @@ describe("StreamableHTTPServerTransport onsessionclosed callback", () => {
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to get a session ID
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
 
     // DELETE the session - should not throw error
@@ -1576,13 +1770,13 @@ describe("StreamableHTTPServerTransport onsessionclosed callback", () => {
 
   it("should not call onsessionclosed callback for invalid session DELETE", async () => {
     const mockCallback = jest.fn();
-    
+
     // Create server with onsessionclosed callback
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessionclosed: mockCallback,
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
@@ -1607,13 +1801,13 @@ describe("StreamableHTTPServerTransport onsessionclosed callback", () => {
 
   it("should call onsessionclosed callback with correct session ID when multiple sessions exist", async () => {
     const mockCallback = jest.fn();
-    
+
     // Create first server
     const result1 = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessionclosed: mockCallback,
     });
-    
+
     const server1 = result1.server;
     const url1 = result1.baseUrl;
 
@@ -1622,14 +1816,14 @@ describe("StreamableHTTPServerTransport onsessionclosed callback", () => {
       sessionIdGenerator: () => randomUUID(),
       onsessionclosed: mockCallback,
     });
-    
+
     const server2 = result2.server;
     const url2 = result2.baseUrl;
 
     // Initialize both servers
     const initResponse1 = await sendPostRequest(url1, TEST_MESSAGES.initialize);
     const sessionId1 = initResponse1.headers.get("mcp-session-id");
-    
+
     const initResponse2 = await sendPostRequest(url2, TEST_MESSAGES.initialize);
     const sessionId2 = initResponse2.headers.get("mcp-session-id");
 
@@ -1673,38 +1867,45 @@ describe("StreamableHTTPServerTransport onsessionclosed callback", () => {
 describe("StreamableHTTPServerTransport async callbacks", () => {
   it("should support async onsessioninitialized callback", async () => {
     const initializationOrder: string[] = [];
-    
+
     // Create server with async onsessioninitialized callback
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: async (sessionId: string) => {
-        initializationOrder.push('async-start');
+        initializationOrder.push("async-start");
         // Simulate async operation
-        await new Promise(resolve => setTimeout(resolve, 10));
-        initializationOrder.push('async-end');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        initializationOrder.push("async-end");
         initializationOrder.push(sessionId);
       },
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to trigger the callback
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
-    
+
     // Give time for async callback to complete
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    expect(initializationOrder).toEqual(['async-start', 'async-end', tempSessionId]);
-    
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(initializationOrder).toEqual([
+      "async-start",
+      "async-end",
+      tempSessionId,
+    ]);
+
     // Clean up
     tempServer.close();
   });
 
   it("should support sync onsessioninitialized callback (backwards compatibility)", async () => {
     const capturedSessionId: string[] = [];
-    
+
     // Create server with sync onsessioninitialized callback
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
@@ -1712,40 +1913,46 @@ describe("StreamableHTTPServerTransport async callbacks", () => {
         capturedSessionId.push(sessionId);
       },
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to trigger the callback
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
-    
+
     expect(capturedSessionId).toEqual([tempSessionId]);
-    
+
     // Clean up
     tempServer.close();
   });
 
   it("should support async onsessionclosed callback", async () => {
     const closureOrder: string[] = [];
-    
+
     // Create server with async onsessionclosed callback
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessionclosed: async (sessionId: string) => {
-        closureOrder.push('async-close-start');
+        closureOrder.push("async-close-start");
         // Simulate async operation
-        await new Promise(resolve => setTimeout(resolve, 10));
-        closureOrder.push('async-close-end');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        closureOrder.push("async-close-end");
         closureOrder.push(sessionId);
       },
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to get a session ID
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
     expect(tempSessionId).toBeDefined();
 
@@ -1759,55 +1966,65 @@ describe("StreamableHTTPServerTransport async callbacks", () => {
     });
 
     expect(deleteResponse.status).toBe(200);
-    
+
     // Give time for async callback to complete
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    expect(closureOrder).toEqual(['async-close-start', 'async-close-end', tempSessionId]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(closureOrder).toEqual([
+      "async-close-start",
+      "async-close-end",
+      tempSessionId,
+    ]);
 
     // Clean up
     tempServer.close();
   });
 
   it("should propagate errors from async onsessioninitialized callback", async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    
+    const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
+
     // Create server with async onsessioninitialized callback that throws
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: async (_sessionId: string) => {
-        throw new Error('Async initialization error');
+        throw new Error("Async initialization error");
       },
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize should fail when callback throws
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     expect(initResponse.status).toBe(400);
-    
+
     // Clean up
     consoleErrorSpy.mockRestore();
     tempServer.close();
   });
 
   it("should propagate errors from async onsessionclosed callback", async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    
+    const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
+
     // Create server with async onsessionclosed callback that throws
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessionclosed: async (_sessionId: string) => {
-        throw new Error('Async closure error');
+        throw new Error("Async closure error");
       },
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to get a session ID
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
 
     // DELETE should fail when callback throws
@@ -1820,7 +2037,7 @@ describe("StreamableHTTPServerTransport async callbacks", () => {
     });
 
     expect(deleteResponse.status).toBe(500);
-    
+
     // Clean up
     consoleErrorSpy.mockRestore();
     tempServer.close();
@@ -1828,30 +2045,33 @@ describe("StreamableHTTPServerTransport async callbacks", () => {
 
   it("should handle both async callbacks together", async () => {
     const events: string[] = [];
-    
+
     // Create server with both async callbacks
     const result = await createTestServer({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: async (sessionId: string) => {
-        await new Promise(resolve => setTimeout(resolve, 5));
+        await new Promise((resolve) => setTimeout(resolve, 5));
         events.push(`initialized:${sessionId}`);
       },
       onsessionclosed: async (sessionId: string) => {
-        await new Promise(resolve => setTimeout(resolve, 5));
+        await new Promise((resolve) => setTimeout(resolve, 5));
         events.push(`closed:${sessionId}`);
       },
     });
-    
+
     const tempServer = result.server;
     const tempUrl = result.baseUrl;
 
     // Initialize to trigger first callback
-    const initResponse = await sendPostRequest(tempUrl, TEST_MESSAGES.initialize);
+    const initResponse = await sendPostRequest(
+      tempUrl,
+      TEST_MESSAGES.initialize,
+    );
     const tempSessionId = initResponse.headers.get("mcp-session-id");
-    
+
     // Wait for async callback
-    await new Promise(resolve => setTimeout(resolve, 20));
-    
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
     expect(events).toContain(`initialized:${tempSessionId}`);
 
     // DELETE to trigger second callback
@@ -1864,10 +2084,10 @@ describe("StreamableHTTPServerTransport async callbacks", () => {
     });
 
     expect(deleteResponse.status).toBe(200);
-    
+
     // Wait for async callback
-    await new Promise(resolve => setTimeout(resolve, 20));
-    
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
     expect(events).toContain(`closed:${tempSessionId}`);
     expect(events).toHaveLength(2);
 
@@ -1892,7 +2112,7 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
     it("should accept requests with allowed host headers", async () => {
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedHosts: ['localhost'],
+        allowedHosts: ["localhost"],
         enableDnsRebindingProtection: true,
       });
       server = result.server;
@@ -1918,7 +2138,7 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
       // but we're connecting via localhost, so it should be rejected
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedHosts: ['example.com:3001'],
+        allowedHosts: ["example.com:3001"],
         enableDnsRebindingProtection: true,
       });
       server = result.server;
@@ -1942,7 +2162,7 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
     it("should reject GET requests with disallowed host headers", async () => {
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedHosts: ['example.com:3001'],
+        allowedHosts: ["example.com:3001"],
         enableDnsRebindingProtection: true,
       });
       server = result.server;
@@ -1964,7 +2184,7 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
     it("should accept requests with allowed origin headers", async () => {
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedOrigins: ['http://localhost:3000', 'https://example.com'],
+        allowedOrigins: ["http://localhost:3000", "https://example.com"],
         enableDnsRebindingProtection: true,
       });
       server = result.server;
@@ -1987,7 +2207,7 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
     it("should reject requests with disallowed origin headers", async () => {
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedOrigins: ['http://localhost:3000'],
+        allowedOrigins: ["http://localhost:3000"],
         enableDnsRebindingProtection: true,
       });
       server = result.server;
@@ -2014,8 +2234,8 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
     it("should skip all validations when enableDnsRebindingProtection is false", async () => {
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedHosts: ['localhost'],
-        allowedOrigins: ['http://localhost:3000'],
+        allowedHosts: ["localhost"],
+        allowedOrigins: ["http://localhost:3000"],
         enableDnsRebindingProtection: false,
       });
       server = result.server;
@@ -2042,8 +2262,8 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
     it("should validate both host and origin when both are configured", async () => {
       const result = await createTestServerWithDnsProtection({
         sessionIdGenerator: undefined,
-        allowedHosts: ['localhost'],
-        allowedOrigins: ['http://localhost:3001'],
+        allowedHosts: ["localhost"],
+        allowedOrigins: ["http://localhost:3001"],
         enableDnsRebindingProtection: true,
       });
       server = result.server;
@@ -2063,7 +2283,9 @@ describe("StreamableHTTPServerTransport DNS rebinding protection", () => {
 
       expect(response1.status).toBe(403);
       const body1 = await response1.json();
-      expect(body1.error.message).toBe("Invalid Origin header: http://evil.com");
+      expect(body1.error.message).toBe(
+        "Invalid Origin header: http://evil.com",
+      );
 
       // Test with valid origin
       const response2 = await fetch(baseUrl, {
@@ -2097,14 +2319,14 @@ async function createTestServerWithDnsProtection(config: {
 }> {
   const mcpServer = new McpServer(
     { name: "test-server", version: "1.0.0" },
-    { capabilities: { logging: {} } }
+    { capabilities: { logging: {} } },
   );
 
   const port = await getFreePort();
 
   if (config.allowedHosts) {
-    config.allowedHosts = config.allowedHosts.map(host => {
-      if (host.includes(':')) {
+    config.allowedHosts = config.allowedHosts.map((host) => {
+      if (host.includes(":")) {
         return host;
       }
       return `localhost:${port}`;
@@ -2126,10 +2348,17 @@ async function createTestServerWithDnsProtection(config: {
       req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         const parsedBody = JSON.parse(body);
-        await transport.handleRequest(req as IncomingMessage & { auth?: AuthInfo }, res, parsedBody);
+        await transport.handleRequest(
+          req as IncomingMessage & { auth?: AuthInfo },
+          res,
+          parsedBody,
+        );
       });
     } else {
-      await transport.handleRequest(req as IncomingMessage & { auth?: AuthInfo }, res);
+      await transport.handleRequest(
+        req as IncomingMessage & { auth?: AuthInfo },
+        res,
+      );
     }
   });
 

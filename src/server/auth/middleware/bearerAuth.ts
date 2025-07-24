@@ -1,5 +1,10 @@
 import { RequestHandler } from "express";
-import { InsufficientScopeError, InvalidTokenError, OAuthError, ServerError } from "../errors.js";
+import {
+  InsufficientScopeError,
+  InvalidTokenError,
+  OAuthError,
+  ServerError,
+} from "../errors.js";
 import { OAuthTokenVerifier } from "../provider.js";
 import { AuthInfo } from "../types.js";
 
@@ -37,7 +42,11 @@ declare module "express-serve-static-core" {
  * If resourceMetadataUrl is provided, it will be included in the WWW-Authenticate header
  * for 401 responses as per the OAuth 2.0 Protected Resource Metadata spec.
  */
-export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetadataUrl }: BearerAuthMiddlewareOptions): RequestHandler {
+export function requireBearerAuth({
+  verifier,
+  requiredScopes = [],
+  resourceMetadataUrl,
+}: BearerAuthMiddlewareOptions): RequestHandler {
   return async (req, res, next) => {
     try {
       const authHeader = req.headers.authorization;
@@ -45,17 +54,19 @@ export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetad
         throw new InvalidTokenError("Missing Authorization header");
       }
 
-      const [type, token] = authHeader.split(' ');
-      if (type.toLowerCase() !== 'bearer' || !token) {
-        throw new InvalidTokenError("Invalid Authorization header format, expected 'Bearer TOKEN'");
+      const [type, token] = authHeader.split(" ");
+      if (type.toLowerCase() !== "bearer" || !token) {
+        throw new InvalidTokenError(
+          "Invalid Authorization header format, expected 'Bearer TOKEN'",
+        );
       }
 
       const authInfo = await verifier.verifyAccessToken(token);
 
       // Check if token has the required scopes (if any)
       if (requiredScopes.length > 0) {
-        const hasAllScopes = requiredScopes.every(scope =>
-          authInfo.scopes.includes(scope)
+        const hasAllScopes = requiredScopes.every((scope) =>
+          authInfo.scopes.includes(scope),
         );
 
         if (!hasAllScopes) {
@@ -64,13 +75,13 @@ export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetad
       }
 
       // Check if the token is set to expire or if it is expired
-      if (typeof authInfo.expiresAt !== 'number' || isNaN(authInfo.expiresAt)) {
+      if (typeof authInfo.expiresAt !== "number" || isNaN(authInfo.expiresAt)) {
         throw new InvalidTokenError("Token has no expiration time");
       } else if (authInfo.expiresAt < Date.now() / 1000) {
         throw new InvalidTokenError("Token has expired");
       }
 
-      req.auth = authInfo;
+      (req as any).auth = authInfo;
       next();
     } catch (error) {
       if (error instanceof InvalidTokenError) {

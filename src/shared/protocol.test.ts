@@ -31,7 +31,7 @@ describe("protocol tests", () => {
 
   beforeEach(() => {
     transport = new MockTransport();
-    sendSpy = jest.spyOn(transport, 'send');
+    sendSpy = jest.spyOn(transport, "send");
     protocol = new (class extends Protocol<Request, Notification, Result> {
       protected assertCapabilityForMethod(): void {}
       protected assertNotificationCapability(): void {}
@@ -84,124 +84,139 @@ describe("protocol tests", () => {
   describe("_meta preservation with onprogress", () => {
     test("should preserve existing _meta when adding progressToken", async () => {
       await protocol.connect(transport);
-      const request = { 
-        method: "example", 
-        params: {
-          data: "test",
-          _meta: {
-            customField: "customValue",
-            anotherField: 123
-          }
-        }
-      };
-      const mockSchema: ZodType<{ result: string }> = z.object({
-        result: z.string(),
-      });
-      const onProgressMock = jest.fn();
-      
-      protocol.request(request, mockSchema, {
-        onprogress: onProgressMock,
-      });
-      
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
+      const request = {
         method: "example",
         params: {
           data: "test",
           _meta: {
             customField: "customValue",
             anotherField: 123,
-            progressToken: expect.any(Number)
-          }
+          },
         },
-        jsonrpc: "2.0",
-        id: expect.any(Number)
-      }), expect.any(Object));
+      };
+      const mockSchema: ZodType<{ result: string }> = z.object({
+        result: z.string(),
+      });
+      const onProgressMock = jest.fn();
+
+      protocol.request(request, mockSchema, {
+        onprogress: onProgressMock,
+        timeout: 1,
+      });
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "example",
+          params: {
+            data: "test",
+            _meta: {
+              customField: "customValue",
+              anotherField: 123,
+              progressToken: expect.any(Number),
+            },
+          },
+          jsonrpc: "2.0",
+          id: expect.any(Number),
+        }),
+        expect.any(Object),
+      );
     });
 
     test("should create _meta with progressToken when no _meta exists", async () => {
       await protocol.connect(transport);
-      const request = { 
-        method: "example", 
+      const request = {
+        method: "example",
         params: {
-          data: "test"
-        }
+          data: "test",
+        },
       };
       const mockSchema: ZodType<{ result: string }> = z.object({
         result: z.string(),
       });
       const onProgressMock = jest.fn();
-      
+
       protocol.request(request, mockSchema, {
         onprogress: onProgressMock,
+        timeout: 1,
       });
-      
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
-        method: "example",
-        params: {
-          data: "test",
-          _meta: {
-            progressToken: expect.any(Number)
-          }
-        },
-        jsonrpc: "2.0",
-        id: expect.any(Number)
-      }), expect.any(Object));
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "example",
+          params: {
+            data: "test",
+            _meta: {
+              progressToken: expect.any(Number),
+            },
+          },
+          jsonrpc: "2.0",
+          id: expect.any(Number),
+        }),
+        expect.any(Object),
+      );
     });
 
     test("should not modify _meta when onprogress is not provided", async () => {
       await protocol.connect(transport);
-      const request = { 
-        method: "example", 
-        params: {
-          data: "test",
-          _meta: {
-            customField: "customValue"
-          }
-        }
-      };
-      const mockSchema: ZodType<{ result: string }> = z.object({
-        result: z.string(),
-      });
-      
-      protocol.request(request, mockSchema);
-      
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
+      const request = {
         method: "example",
         params: {
           data: "test",
           _meta: {
-            customField: "customValue"
-          }
+            customField: "customValue",
+          },
         },
-        jsonrpc: "2.0",
-        id: expect.any(Number)
-      }), expect.any(Object));
+      };
+      const mockSchema: ZodType<{ result: string }> = z.object({
+        result: z.string(),
+      });
+
+      protocol.request(request, mockSchema, { timeout: 1 });
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "example",
+          params: {
+            data: "test",
+            _meta: {
+              customField: "customValue",
+            },
+          },
+          jsonrpc: "2.0",
+          id: expect.any(Number),
+        }),
+        expect.any(Object),
+      );
     });
 
     test("should handle params being undefined with onprogress", async () => {
       await protocol.connect(transport);
-      const request = { 
-        method: "example"
+      const request = {
+        method: "example",
       };
       const mockSchema: ZodType<{ result: string }> = z.object({
         result: z.string(),
       });
       const onProgressMock = jest.fn();
-      
+
       protocol.request(request, mockSchema, {
         onprogress: onProgressMock,
+        timeout: 1,
       });
-      
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
-        method: "example",
-        params: {
-          _meta: {
-            progressToken: expect.any(Number)
-          }
-        },
-        jsonrpc: "2.0",
-        id: expect.any(Number)
-      }), expect.any(Object));
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "example",
+          params: {
+            _meta: {
+              progressToken: expect.any(Number),
+            },
+          },
+          jsonrpc: "2.0",
+          id: expect.any(Number),
+        }),
+        expect.any(Object),
+      );
     });
   });
 
@@ -225,9 +240,9 @@ describe("protocol tests", () => {
         resetTimeoutOnProgress: false,
         onprogress: onProgressMock,
       });
-      
+
       jest.advanceTimersByTime(800);
-      
+
       if (transport.onmessage) {
         transport.onmessage({
           jsonrpc: "2.0",
@@ -240,14 +255,14 @@ describe("protocol tests", () => {
         });
       }
       await Promise.resolve();
-      
+
       expect(onProgressMock).toHaveBeenCalledWith({
         progress: 50,
         total: 100,
       });
-      
+
       jest.advanceTimersByTime(201);
-      
+
       await expect(requestPromise).rejects.toThrow("Request timed out");
     });
 
@@ -336,7 +351,9 @@ describe("protocol tests", () => {
           },
         });
       }
-      await expect(requestPromise).rejects.toThrow("Maximum total timeout exceeded");
+      await expect(requestPromise).rejects.toThrow(
+        "Maximum total timeout exceeded",
+      );
       expect(onProgressMock).toHaveBeenCalledTimes(1);
     });
 
@@ -470,60 +487,86 @@ describe("protocol tests", () => {
   describe("Debounced Notifications", () => {
     // We need to flush the microtask queue to test the debouncing logic.
     // This helper function does that.
-    const flushMicrotasks = () => new Promise(resolve => setImmediate(resolve));
+    const flushMicrotasks = () =>
+      new Promise((resolve) => setImmediate(resolve));
 
-      it("should NOT debounce a notification that has parameters", async () => {
+    it("should NOT debounce a notification that has parameters", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced_with_params'] });
+      })({ debouncedNotificationMethods: ["test/debounced_with_params"] });
       await protocol.connect(transport);
 
       // ACT
       // These notifications are configured for debouncing but contain params, so they should be sent immediately.
-      await protocol.notification({ method: 'test/debounced_with_params', params: { data: 1 } });
-      await protocol.notification({ method: 'test/debounced_with_params', params: { data: 2 } });
+      await protocol.notification({
+        method: "test/debounced_with_params",
+        params: { data: 1 },
+      });
+      await protocol.notification({
+        method: "test/debounced_with_params",
+        params: { data: 2 },
+      });
 
       // ASSERT
       // Both should have been sent immediately to avoid data loss.
       expect(sendSpy).toHaveBeenCalledTimes(2);
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ params: { data: 1 } }), undefined);
-      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ params: { data: 2 } }), undefined);
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { data: 1 } }),
+        undefined,
+      );
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { data: 2 } }),
+        undefined,
+      );
     });
 
     it("should NOT debounce a notification that has a relatedRequestId", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced_with_options'] });
+      })({ debouncedNotificationMethods: ["test/debounced_with_options"] });
       await protocol.connect(transport);
 
       // ACT
-      await protocol.notification({ method: 'test/debounced_with_options' }, { relatedRequestId: 'req-1' });
-      await protocol.notification({ method: 'test/debounced_with_options' }, { relatedRequestId: 'req-2' });
+      await protocol.notification(
+        { method: "test/debounced_with_options" },
+        { relatedRequestId: "req-1" },
+      );
+      await protocol.notification(
+        { method: "test/debounced_with_options" },
+        { relatedRequestId: "req-2" },
+      );
 
       // ASSERT
       expect(sendSpy).toHaveBeenCalledTimes(2);
-      expect(sendSpy).toHaveBeenCalledWith(expect.any(Object), { relatedRequestId: 'req-1' });
-      expect(sendSpy).toHaveBeenCalledWith(expect.any(Object), { relatedRequestId: 'req-2' });
+      expect(sendSpy).toHaveBeenCalledWith(expect.any(Object), {
+        relatedRequestId: "req-1",
+      });
+      expect(sendSpy).toHaveBeenCalledWith(expect.any(Object), {
+        relatedRequestId: "req-2",
+      });
     });
 
     it("should clear pending debounced notifications on connection close", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced'] });
+      })({ debouncedNotificationMethods: ["test/debounced"] });
       await protocol.connect(transport);
 
       // ACT
       // Schedule a notification but don't flush the microtask queue.
-      protocol.notification({ method: 'test/debounced' });
+      protocol.notification({ method: "test/debounced" });
 
       // Close the connection. This should clear the pending set.
       await protocol.close();
@@ -538,18 +581,19 @@ describe("protocol tests", () => {
 
     it("should debounce multiple synchronous calls when params property is omitted", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced'] });
+      })({ debouncedNotificationMethods: ["test/debounced"] });
       await protocol.connect(transport);
 
       // ACT
       // This is the more idiomatic way to write a notification with no params.
-      protocol.notification({ method: 'test/debounced' });
-      protocol.notification({ method: 'test/debounced' });
-      protocol.notification({ method: 'test/debounced' });
+      protocol.notification({ method: "test/debounced" });
+      protocol.notification({ method: "test/debounced" });
+      protocol.notification({ method: "test/debounced" });
 
       expect(sendSpy).not.toHaveBeenCalled();
       await flushMicrotasks();
@@ -559,48 +603,50 @@ describe("protocol tests", () => {
       // The final sent object might not even have the `params` key, which is fine.
       // We can check that it was called and that the params are "falsy".
       const sentNotification = sendSpy.mock.calls[0][0];
-      expect(sentNotification.method).toBe('test/debounced');
+      expect(sentNotification.method).toBe("test/debounced");
       expect(sentNotification.params).toBeUndefined();
     });
 
     it("should debounce calls when params is explicitly undefined", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced'] });
+      })({ debouncedNotificationMethods: ["test/debounced"] });
       await protocol.connect(transport);
 
       // ACT
-      protocol.notification({ method: 'test/debounced', params: undefined });
-      protocol.notification({ method: 'test/debounced', params: undefined });
+      protocol.notification({ method: "test/debounced", params: undefined });
+      protocol.notification({ method: "test/debounced", params: undefined });
       await flushMicrotasks();
 
       // ASSERT
       expect(sendSpy).toHaveBeenCalledTimes(1);
       expect(sendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          method: 'test/debounced',
-          params: undefined
+          method: "test/debounced",
+          params: undefined,
         }),
-        undefined
+        undefined,
       );
     });
 
     it("should send non-debounced notifications immediately and multiple times", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced'] }); // Configure for a different method
+      })({ debouncedNotificationMethods: ["test/debounced"] }); // Configure for a different method
       await protocol.connect(transport);
 
       // ACT
       // Call a non-debounced notification method multiple times.
-      await protocol.notification({ method: 'test/immediate' });
-      await protocol.notification({ method: 'test/immediate' });
+      await protocol.notification({ method: "test/immediate" });
+      await protocol.notification({ method: "test/immediate" });
 
       // ASSERT
       // Since this method is not in the debounce list, it should be sent every time.
@@ -613,8 +659,8 @@ describe("protocol tests", () => {
       await protocol.connect(transport);
 
       // ACT
-      await protocol.notification({ method: 'any/method' });
-      await protocol.notification({ method: 'any/method' });
+      await protocol.notification({ method: "any/method" });
+      await protocol.notification({ method: "any/method" });
 
       // ASSERT
       // Without the config, behavior should be immediate sending.
@@ -623,16 +669,17 @@ describe("protocol tests", () => {
 
     it("should handle sequential batches of debounced notifications correctly", async () => {
       // ARRANGE
+      await protocol.close().catch(() => {});
       protocol = new (class extends Protocol<Request, Notification, Result> {
         protected assertCapabilityForMethod(): void {}
         protected assertNotificationCapability(): void {}
         protected assertRequestHandlerCapability(): void {}
-      })({ debouncedNotificationMethods: ['test/debounced'] });
+      })({ debouncedNotificationMethods: ["test/debounced"] });
       await protocol.connect(transport);
 
       // ACT (Batch 1)
-      protocol.notification({ method: 'test/debounced' });
-      protocol.notification({ method: 'test/debounced' });
+      protocol.notification({ method: "test/debounced" });
+      protocol.notification({ method: "test/debounced" });
       await flushMicrotasks();
 
       // ASSERT (Batch 1)
@@ -640,8 +687,8 @@ describe("protocol tests", () => {
 
       // ACT (Batch 2)
       // After the first batch has been sent, a new batch should be possible.
-      protocol.notification({ method: 'test/debounced' });
-      protocol.notification({ method: 'test/debounced' });
+      protocol.notification({ method: "test/debounced" });
+      protocol.notification({ method: "test/debounced" });
       await flushMicrotasks();
 
       // ASSERT (Batch 2)

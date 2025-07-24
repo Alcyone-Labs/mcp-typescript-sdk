@@ -1,60 +1,57 @@
-import { StdioClientTransport, getDefaultEnvironment } from "./stdio.js";
-import spawn from "cross-spawn";
+import { jest } from "@jest/globals";
 import { JSONRPCMessage } from "../types.js";
-import { ChildProcess } from "node:child_process";
 
-// mock cross-spawn
-jest.mock("cross-spawn");
-const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
+// Mock cross-spawn before importing
+const mockSpawn = jest.fn();
+jest.unstable_mockModule("cross-spawn", () => ({
+  default: mockSpawn,
+}));
+
+// Import modules after mocking
+const { StdioClientTransport, getDefaultEnvironment } = await import(
+  "./stdio.js"
+);
 
 describe("StdioClientTransport using cross-spawn", () => {
   beforeEach(() => {
-    // mock cross-spawn's return value
-    mockSpawn.mockImplementation(() => {
-      const mockProcess: {
-        on: jest.Mock;
-        stdin?: { on: jest.Mock; write: jest.Mock };
-        stdout?: { on: jest.Mock };
-        stderr?: null;
-      } = {
-        on: jest.fn((event: string, callback: () => void) => {
-          if (event === "spawn") {
-            callback();
-          }
-          return mockProcess;
-        }),
-        stdin: {
-          on: jest.fn(),
-          write: jest.fn().mockReturnValue(true)
-        },
-        stdout: {
-          on: jest.fn()
-        },
-        stderr: null
-      };
-      return mockProcess as unknown as ChildProcess;
-    });
-  });
-
-  afterEach(() => {
     jest.clearAllMocks();
+
+    const mockProcess = {
+      on: jest.fn((event: string, callback: () => void) => {
+        if (event === "spawn") {
+          setTimeout(callback, 0);
+        }
+        return mockProcess;
+      }),
+      stdin: {
+        on: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
+        once: jest.fn(),
+      },
+      stdout: {
+        on: jest.fn(),
+      },
+      stderr: null,
+      pid: 12345,
+    };
+
+    mockSpawn.mockImplementation(() => mockProcess);
   });
 
   test("should call cross-spawn correctly", async () => {
     const transport = new StdioClientTransport({
       command: "test-command",
-      args: ["arg1", "arg2"]
+      args: ["arg1", "arg2"],
     });
 
     await transport.start();
 
-    // verify spawn is called correctly
     expect(mockSpawn).toHaveBeenCalledWith(
       "test-command",
       ["arg1", "arg2"],
       expect.objectContaining({
-        shell: false
-      })
+        shell: false,
+      }),
     );
   });
 
@@ -62,91 +59,56 @@ describe("StdioClientTransport using cross-spawn", () => {
     const customEnv = { TEST_VAR: "test-value" };
     const transport = new StdioClientTransport({
       command: "test-command",
-      env: customEnv
+      env: customEnv,
     });
 
     await transport.start();
 
-    // verify environment variables are merged correctly
     expect(mockSpawn).toHaveBeenCalledWith(
       "test-command",
       [],
       expect.objectContaining({
         env: {
           ...getDefaultEnvironment(),
-          ...customEnv
-        }
-      })
+          ...customEnv,
+        },
+      }),
     );
   });
 
   test("should use default environment when env is undefined", async () => {
     const transport = new StdioClientTransport({
       command: "test-command",
-      env: undefined
+      env: undefined,
     });
 
     await transport.start();
 
-    // verify default environment is used
     expect(mockSpawn).toHaveBeenCalledWith(
       "test-command",
       [],
       expect.objectContaining({
-        env: getDefaultEnvironment()
-      })
+        env: getDefaultEnvironment(),
+      }),
     );
   });
 
   test("should send messages correctly", async () => {
     const transport = new StdioClientTransport({
-      command: "test-command"
+      command: "test-command",
     });
-
-    // get the mock process object
-    const mockProcess: {
-      on: jest.Mock;
-      stdin: {
-        on: jest.Mock;
-        write: jest.Mock;
-        once: jest.Mock;
-      };
-      stdout: {
-        on: jest.Mock;
-      };
-      stderr: null;
-    } = {
-      on: jest.fn((event: string, callback: () => void) => {
-        if (event === "spawn") {
-          callback();
-        }
-        return mockProcess;
-      }),
-      stdin: {
-        on: jest.fn(),
-        write: jest.fn().mockReturnValue(true),
-        once: jest.fn()
-      },
-      stdout: {
-        on: jest.fn()
-      },
-      stderr: null
-    };
-
-    mockSpawn.mockReturnValue(mockProcess as unknown as ChildProcess);
 
     await transport.start();
 
-    // 关键修复：确保 jsonrpc 是字面量 "2.0"
     const message: JSONRPCMessage = {
       jsonrpc: "2.0",
       id: "test-id",
-      method: "test-method"
+      method: "test-method",
     };
 
     await transport.send(message);
 
-    // verify message is sent correctly
-    expect(mockProcess.stdin.write).toHaveBeenCalled();
+    const mockProcess = mockSpawn.mock.results[0]?.value;
+    expect(mockProcess?.stdin?.write).toHaveBeenCalled();
   });
 });

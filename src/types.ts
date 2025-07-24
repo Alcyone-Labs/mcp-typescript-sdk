@@ -23,50 +23,42 @@ export const ProgressTokenSchema = z.union([z.string(), z.number().int()]);
  */
 export const CursorSchema = z.string();
 
-const RequestMetaSchema = z
-  .object({
-    /**
-     * If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-     */
-    progressToken: z.optional(ProgressTokenSchema),
-  })
-  .passthrough();
+const RequestMetaSchema = z.looseObject({
+  /**
+   * If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+   */
+  progressToken: z.optional(ProgressTokenSchema),
+});
 
-const BaseRequestParamsSchema = z
-  .object({
-    _meta: z.optional(RequestMetaSchema),
-  })
-  .passthrough();
+const BaseRequestParamsSchema = z.looseObject({
+  _meta: z.optional(RequestMetaSchema),
+});
 
 export const RequestSchema = z.object({
   method: z.string(),
   params: z.optional(BaseRequestParamsSchema),
 });
 
-const BaseNotificationParamsSchema = z
-  .object({
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+const BaseNotificationParamsSchema = z.looseObject({
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 export const NotificationSchema = z.object({
   method: z.string(),
   params: z.optional(BaseNotificationParamsSchema),
 });
 
-export const ResultSchema = z
-  .object({
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+export const ResultSchema = z.looseObject({
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 /**
  * A uniquely identifying ID for a request in JSON-RPC.
@@ -77,44 +69,46 @@ export const RequestIdSchema = z.union([z.string(), z.number().int()]);
  * A request that expects a response.
  */
 export const JSONRPCRequestSchema = z
-  .object({
+  .strictObject({
     jsonrpc: z.literal(JSONRPC_VERSION),
     id: RequestIdSchema,
   })
-  .merge(RequestSchema)
-  .strict();
+  .extend(RequestSchema.shape);
 
-export const isJSONRPCRequest = (value: unknown): value is JSONRPCRequest =>
-  JSONRPCRequestSchema.safeParse(value).success;
+export const isJSONRPCRequest = (value: unknown): value is JSONRPCRequest => {
+  const result = JSONRPCRequestSchema.safeParse(value);
+  return result.success;
+};
 
 /**
  * A notification which does not expect a response.
  */
 export const JSONRPCNotificationSchema = z
-  .object({
+  .strictObject({
     jsonrpc: z.literal(JSONRPC_VERSION),
   })
-  .merge(NotificationSchema)
-  .strict();
+  .extend(NotificationSchema.shape);
 
 export const isJSONRPCNotification = (
-  value: unknown
-): value is JSONRPCNotification =>
-  JSONRPCNotificationSchema.safeParse(value).success;
+  value: unknown,
+): value is JSONRPCNotification => {
+  const result = JSONRPCNotificationSchema.safeParse(value);
+  return result.success;
+};
 
 /**
  * A successful (non-error) response to a request.
  */
-export const JSONRPCResponseSchema = z
-  .object({
-    jsonrpc: z.literal(JSONRPC_VERSION),
-    id: RequestIdSchema,
-    result: ResultSchema,
-  })
-  .strict();
+export const JSONRPCResponseSchema = z.strictObject({
+  jsonrpc: z.literal(JSONRPC_VERSION),
+  id: RequestIdSchema,
+  result: ResultSchema,
+});
 
-export const isJSONRPCResponse = (value: unknown): value is JSONRPCResponse =>
-  JSONRPCResponseSchema.safeParse(value).success;
+export const isJSONRPCResponse = (value: unknown): value is JSONRPCResponse => {
+  const result = JSONRPCResponseSchema.safeParse(value);
+  return result.success;
+};
 
 /**
  * Error codes defined by the JSON-RPC specification.
@@ -135,29 +129,29 @@ export enum ErrorCode {
 /**
  * A response to a request that indicates an error occurred.
  */
-export const JSONRPCErrorSchema = z
-  .object({
-    jsonrpc: z.literal(JSONRPC_VERSION),
-    id: RequestIdSchema,
-    error: z.object({
-      /**
-       * The error type that occurred.
-       */
-      code: z.number().int(),
-      /**
-       * A short description of the error. The message SHOULD be limited to a concise single sentence.
-       */
-      message: z.string(),
-      /**
-       * Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
-       */
-      data: z.optional(z.unknown()),
-    }),
-  })
-  .strict();
+export const JSONRPCErrorSchema = z.strictObject({
+  jsonrpc: z.literal(JSONRPC_VERSION),
+  id: RequestIdSchema,
+  error: z.object({
+    /**
+     * The error type that occurred.
+     */
+    code: z.number().int(),
+    /**
+     * A short description of the error. The message SHOULD be limited to a concise single sentence.
+     */
+    message: z.string(),
+    /**
+     * Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
+     */
+    data: z.optional(z.unknown()),
+  }),
+});
 
-export const isJSONRPCError = (value: unknown): value is JSONRPCError =>
-  JSONRPCErrorSchema.safeParse(value).success;
+export const isJSONRPCError = (value: unknown): value is JSONRPCError => {
+  const result = JSONRPCErrorSchema.safeParse(value);
+  return result.success;
+};
 
 export const JSONRPCMessageSchema = z.union([
   JSONRPCRequestSchema,
@@ -170,7 +164,7 @@ export const JSONRPCMessageSchema = z.union([
 /**
  * A response that indicates success but carries no data.
  */
-export const EmptyResultSchema = ResultSchema.strict();
+export const EmptyResultSchema = z.strictObject({}).extend(ResultSchema.shape);
 
 /* Cancellation */
 /**
@@ -203,21 +197,19 @@ export const CancelledNotificationSchema = NotificationSchema.extend({
 /**
  * Base metadata interface for common properties across resources, tools, prompts, and implementations.
  */
-export const BaseMetadataSchema = z
-  .object({
-    /** Intended for programmatic or logical use, but used as a display name in past specs or fallback */
-    name: z.string(),
-    /**
-    * Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
-    * even by those unfamiliar with domain-specific terminology.
-    *
-    * If not provided, the name should be used for display (except for Tool,
-    * where `annotations.title` should be given precedence over using `name`,
-    * if present).
-    */
-    title: z.optional(z.string()),
-  })
-  .passthrough();
+const BaseMetadataSchema = z.looseObject({
+  /** Intended for programmatic or logical use, but used as a display name in past specs or fallback */
+  name: z.string(),
+  /**
+   * Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
+   * even by those unfamiliar with domain-specific terminology.
+   *
+   * If not provided, the name should be used for display (except for Tool,
+   * where `annotations.title` should be given precedence over using `name`,
+   * if present).
+   */
+  title: z.optional(z.string()),
+});
 
 /* Initialization */
 /**
@@ -275,9 +267,12 @@ export const InitializeRequestSchema = RequestSchema.extend({
   }),
 });
 
-export const isInitializeRequest = (value: unknown): value is InitializeRequest =>
-  InitializeRequestSchema.safeParse(value).success;
-
+export const isInitializeRequest = (
+  value: unknown,
+): value is InitializeRequest => {
+  const result = InitializeRequestSchema.safeParse(value);
+  return result.success;
+};
 
 /**
  * Capabilities that a server may support. Known capabilities are defined here, in this schema, but this is not a closed set: any server can define its own, additional capabilities.
@@ -368,8 +363,12 @@ export const InitializedNotificationSchema = NotificationSchema.extend({
   method: z.literal("notifications/initialized"),
 });
 
-export const isInitializedNotification = (value: unknown): value is InitializedNotification =>
-  InitializedNotificationSchema.safeParse(value).success;
+export const isInitializedNotification = (
+  value: unknown,
+): value is InitializedNotification => {
+  const result = InitializedNotificationSchema.safeParse(value);
+  return result.success;
+};
 
 /* Ping */
 /**
@@ -402,7 +401,8 @@ export const ProgressSchema = z
  */
 export const ProgressNotificationSchema = NotificationSchema.extend({
   method: z.literal("notifications/progress"),
-  params: BaseNotificationParamsSchema.merge(ProgressSchema).extend({
+  params: BaseNotificationParamsSchema.extend({
+    ...ProgressSchema.shape,
     /**
      * The progress token which was given in the initial request, used to associate this notification with the request that is proceeding.
      */
@@ -433,23 +433,21 @@ export const PaginatedResultSchema = ResultSchema.extend({
 /**
  * The contents of a specific resource or sub-resource.
  */
-export const ResourceContentsSchema = z
-  .object({
-    /**
-     * The URI of this resource.
-     */
-    uri: z.string(),
-    /**
-     * The MIME type of this resource, if known.
-     */
-    mimeType: z.optional(z.string()),
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+export const ResourceContentsSchema = z.looseObject({
+  /**
+   * The URI of this resource.
+   */
+  uri: z.string(),
+  /**
+   * The MIME type of this resource, if known.
+   */
+  mimeType: z.optional(z.string()),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 export const TextResourceContentsSchema = ResourceContentsSchema.extend({
   /**
@@ -458,24 +456,23 @@ export const TextResourceContentsSchema = ResourceContentsSchema.extend({
   text: z.string(),
 });
 
-
 /**
  * A Zod schema for validating Base64 strings that is more performant and
  * robust for very large inputs than the default regex-based check. It avoids
  * stack overflows by using the native `atob` function for validation.
  */
 const Base64Schema = z.string().refine(
-    (val) => {
-        try {
-            // atob throws a DOMException if the string contains characters
-            // that are not part of the Base64 character set.
-            atob(val);
-            return true;
-        } catch {
-            return false;
-        }
-    },
-    { message: "Invalid Base64 string" },
+  (val) => {
+    try {
+      // atob throws a DOMException if the string contains characters
+      // that are not part of the Base64 character set.
+      atob(val);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: "Invalid Base64 string" },
 );
 
 export const BlobResourceContentsSchema = ResourceContentsSchema.extend({
@@ -643,22 +640,20 @@ export const ResourceUpdatedNotificationSchema = NotificationSchema.extend({
 /**
  * Describes an argument that a prompt can accept.
  */
-export const PromptArgumentSchema = z
-  .object({
-    /**
-     * The name of the argument.
-     */
-    name: z.string(),
-    /**
-     * A human-readable description of the argument.
-     */
-    description: z.optional(z.string()),
-    /**
-     * Whether this argument must be provided.
-     */
-    required: z.optional(z.boolean()),
-  })
-  .passthrough();
+export const PromptArgumentSchema = z.looseObject({
+  /**
+   * The name of the argument.
+   */
+  name: z.string(),
+  /**
+   * A human-readable description of the argument.
+   */
+  description: z.optional(z.string()),
+  /**
+   * Whether this argument is required.
+   */
+  required: z.optional(z.boolean()),
+});
 
 /**
  * A prompt or prompt template that the server offers.
@@ -706,89 +701,78 @@ export const GetPromptRequestSchema = RequestSchema.extend({
     /**
      * Arguments to use for templating the prompt.
      */
-    arguments: z.optional(z.record(z.string())),
+    arguments: z.optional(z.record(z.string(), z.string())),
   }),
 });
 
 /**
  * Text provided to or from an LLM.
  */
-export const TextContentSchema = z
-  .object({
-    type: z.literal("text"),
-    /**
-     * The text content of the message.
-     */
-    text: z.string(),
-
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+export const TextContentSchema = z.looseObject({
+  type: z.literal("text"),
+  /**
+   * The text content of the message.
+   */
+  text: z.string(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 /**
  * An image provided to or from an LLM.
  */
-export const ImageContentSchema = z
-  .object({
-    type: z.literal("image"),
-    /**
-     * The base64-encoded image data.
-     */
-    data: Base64Schema,
-    /**
-     * The MIME type of the image. Different providers may support different image types.
-     */
-    mimeType: z.string(),
-
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+export const ImageContentSchema = z.looseObject({
+  type: z.literal("image"),
+  /**
+   * The base64-encoded image data.
+   */
+  data: Base64Schema,
+  /**
+   * The MIME type of the image. Different providers may support different image types.
+   */
+  mimeType: z.string(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 /**
  * An Audio provided to or from an LLM.
  */
-export const AudioContentSchema = z
-  .object({
-    type: z.literal("audio"),
-    /**
-     * The base64-encoded audio data.
-     */
-    data: Base64Schema,
-    /**
-     * The MIME type of the audio. Different providers may support different audio types.
-     */
-    mimeType: z.string(),
-
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+export const AudioContentSchema = z.looseObject({
+  type: z.literal("audio"),
+  /**
+   * The base64-encoded audio data.
+   */
+  data: Base64Schema,
+  /**
+   * The MIME type of the audio. Different providers may support different audio types.
+   */
+  mimeType: z.string(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 /**
  * The contents of a resource, embedded into a prompt or tool call result.
  */
-export const EmbeddedResourceSchema = z
-  .object({
-    type: z.literal("resource"),
-    resource: z.union([TextResourceContentsSchema, BlobResourceContentsSchema]),
-    /**
-     * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
-     * for notes on _meta usage.
-     */
-    _meta: z.optional(z.object({}).passthrough()),
-  })
-  .passthrough();
+export const EmbeddedResourceSchema = z.looseObject({
+  type: z.literal("resource"),
+  resource: z.union([TextResourceContentsSchema, BlobResourceContentsSchema]),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: z.optional(z.looseObject({})),
+});
 
 /**
  * A resource that the server is capable of reading, included in a prompt or tool call result.
@@ -813,12 +797,10 @@ export const ContentBlockSchema = z.union([
 /**
  * Describes a message returned as part of a prompt.
  */
-export const PromptMessageSchema = z
-  .object({
-    role: z.enum(["user", "assistant"]),
-    content: ContentBlockSchema,
-  })
-  .passthrough();
+export const PromptMessageSchema = z.looseObject({
+  role: z.enum(["user", "assistant"]),
+  content: ContentBlockSchema,
+});
 
 /**
  * The server's response to a prompts/get request from the client.
@@ -906,24 +888,21 @@ export const ToolSchema = BaseMetadataSchema.extend({
   /**
    * A JSON Schema object defining the expected parameters for the tool.
    */
-  inputSchema: z
-    .object({
-      type: z.literal("object"),
-      properties: z.optional(z.object({}).passthrough()),
-      required: z.optional(z.array(z.string())),
-    })
-    .passthrough(),
+  inputSchema: z.object({
+    type: z.literal("object"),
+    properties: z.optional(z.looseObject({})),
+    required: z.optional(z.array(z.string())),
+  }),
   /**
    * An optional JSON Schema object defining the structure of the tool's output returned in
    * the structuredContent field of a CallToolResult.
    */
   outputSchema: z.optional(
-    z.object({
+    z.looseObject({
       type: z.literal("object"),
-      properties: z.optional(z.object({}).passthrough()),
+      properties: z.optional(z.looseObject({})),
       required: z.optional(z.array(z.string())),
-    })
-      .passthrough()
+    }),
   ),
   /**
    * Optional additional tool information.
@@ -968,7 +947,7 @@ export const CallToolResultSchema = ResultSchema.extend({
    *
    * If the Tool defines an outputSchema, this field MUST be present in the result, and contain a JSON object that matches the schema.
    */
-  structuredContent: z.object({}).passthrough().optional(),
+  structuredContent: z.looseObject({}).optional(),
 
   /**
    * Whether the tool call ended in an error.
@@ -1003,7 +982,7 @@ export const CallToolRequestSchema = RequestSchema.extend({
   method: z.literal("tools/call"),
   params: BaseRequestParamsSchema.extend({
     name: z.string(),
-    arguments: z.optional(z.record(z.unknown())),
+    arguments: z.optional(z.record(z.string(), z.unknown())),
   }),
 });
 
@@ -1067,48 +1046,42 @@ export const LoggingMessageNotificationSchema = NotificationSchema.extend({
 /**
  * Hints to use for model selection.
  */
-export const ModelHintSchema = z
-  .object({
-    /**
-     * A hint for a model name.
-     */
-    name: z.string().optional(),
-  })
-  .passthrough();
+export const ModelHintSchema = z.looseObject({
+  /**
+   * A hint for a model name.
+   */
+  name: z.string().optional(),
+});
 
 /**
  * The server's preferences for model selection, requested of the client during sampling.
  */
-export const ModelPreferencesSchema = z
-  .object({
-    /**
-     * Optional hints to use for model selection.
-     */
-    hints: z.optional(z.array(ModelHintSchema)),
-    /**
-     * How much to prioritize cost when selecting a model.
-     */
-    costPriority: z.optional(z.number().min(0).max(1)),
-    /**
-     * How much to prioritize sampling speed (latency) when selecting a model.
-     */
-    speedPriority: z.optional(z.number().min(0).max(1)),
-    /**
-     * How much to prioritize intelligence and capabilities when selecting a model.
-     */
-    intelligencePriority: z.optional(z.number().min(0).max(1)),
-  })
-  .passthrough();
+export const ModelPreferencesSchema = z.looseObject({
+  /**
+   * Optional hints to use for model selection. If multiple models are supported, the client MAY choose how to prioritize these hints to pick a model.
+   */
+  hints: z.optional(z.array(ModelHintSchema)),
+  /**
+   * A hint for the model's cost priority. 0 = highest cost, 1 = lowest cost. The client MAY use this to decide which model to use.
+   */
+  costPriority: z.optional(z.number().min(0).max(1)),
+  /**
+   * A hint for the model's speed priority. 0 = slowest, 1 = fastest. The client MAY use this to decide which model to use.
+   */
+  speedPriority: z.optional(z.number().min(0).max(1)),
+  /**
+   * A hint for the model's intelligence priority. 0 = least intelligent, 1 = most intelligent. The client MAY use this to decide which model to use.
+   */
+  intelligencePriority: z.optional(z.number().min(0).max(1)),
+});
 
 /**
  * Describes a message issued to or received from an LLM API.
  */
-export const SamplingMessageSchema = z
-  .object({
-    role: z.enum(["user", "assistant"]),
-    content: z.union([TextContentSchema, ImageContentSchema, AudioContentSchema]),
-  })
-  .passthrough();
+export const SamplingMessageSchema = z.looseObject({
+  role: z.enum(["user", "assistant"]),
+  content: z.union([TextContentSchema, ImageContentSchema, AudioContentSchema]),
+});
 
 /**
  * A request from the server to sample an LLM via the client. The client has full discretion over which model to select. The client should also inform the user before beginning sampling, to allow them to inspect the request (human in the loop) and decide whether to approve it.
@@ -1134,7 +1107,7 @@ export const CreateMessageRequestSchema = RequestSchema.extend({
     /**
      * Optional metadata to pass through to the LLM provider. The format of this metadata is provider-specific.
      */
-    metadata: z.optional(z.object({}).passthrough()),
+    metadata: z.optional(z.looseObject({})),
     /**
      * The server's preferences for which model to select.
      */
@@ -1160,7 +1133,7 @@ export const CreateMessageResultSchema = ResultSchema.extend({
   content: z.discriminatedUnion("type", [
     TextContentSchema,
     ImageContentSchema,
-    AudioContentSchema
+    AudioContentSchema,
   ]),
 });
 
@@ -1168,14 +1141,12 @@ export const CreateMessageResultSchema = ResultSchema.extend({
 /**
  * Primitive schema definition for boolean fields.
  */
-export const BooleanSchemaSchema = z
-  .object({
-    type: z.literal("boolean"),
-    title: z.optional(z.string()),
-    description: z.optional(z.string()),
-    default: z.optional(z.boolean()),
-  })
-  .passthrough();
+export const BooleanSchemaSchema = z.looseObject({
+  type: z.literal("boolean"),
+  title: z.optional(z.string()),
+  description: z.optional(z.string()),
+  default: z.optional(z.boolean()),
+});
 
 /**
  * Primitive schema definition for string fields.
@@ -1241,13 +1212,11 @@ export const ElicitRequestSchema = RequestSchema.extend({
     /**
      * The schema for the requested user input.
      */
-    requestedSchema: z
-      .object({
-        type: z.literal("object"),
-        properties: z.record(z.string(), PrimitiveSchemaDefinitionSchema),
-        required: z.optional(z.array(z.string())),
-      })
-      .passthrough(),
+    requestedSchema: z.looseObject({
+      type: z.literal("object"),
+      properties: z.record(z.string(), PrimitiveSchemaDefinitionSchema),
+      required: z.optional(z.array(z.string())),
+    }),
   }),
 });
 
@@ -1325,7 +1294,7 @@ export const CompleteRequestSchema = RequestSchema.extend({
          * Previously-resolved variables in a URI template or prompt.
          */
         arguments: z.optional(z.record(z.string(), z.string())),
-      })
+      }),
     ),
   }),
 });
@@ -1378,7 +1347,7 @@ export const RootSchema = z
 /**
  * Sent from the server to request a list of root URIs from the client.
  */
-export const ListRootsRequestSchema = RequestSchema.extend({
+export const ListRootsRequestSchema = PaginatedRequestSchema.extend({
   method: z.literal("roots/list"),
 });
 
@@ -1473,16 +1442,16 @@ type Primitive = string | number | boolean | bigint | null | undefined;
 type Flatten<T> = T extends Primitive
   ? T
   : T extends Array<infer U>
-  ? Array<Flatten<U>>
-  : T extends Set<infer U>
-  ? Set<Flatten<U>>
-  : T extends Map<infer K, infer V>
-  ? Map<Flatten<K>, Flatten<V>>
-  : T extends object
-  ? { [K in keyof T]: Flatten<T[K]> }
-  : T;
+    ? Array<Flatten<U>>
+    : T extends Set<infer U>
+      ? Set<Flatten<U>>
+      : T extends Map<infer K, infer V>
+        ? Map<Flatten<K>, Flatten<V>>
+        : T extends object
+          ? { [K in keyof T]: Flatten<T[K]> }
+          : T;
 
-type Infer<Schema extends ZodTypeAny> = Flatten<z.infer<Schema>>;
+// Using native z.infer for Zod v4 compatibility
 
 /**
  * Headers that are compatible with both Node.js and the browser.
@@ -1515,131 +1484,155 @@ export interface MessageExtraInfo {
 }
 
 /* JSON-RPC types */
-export type ProgressToken = Infer<typeof ProgressTokenSchema>;
-export type Cursor = Infer<typeof CursorSchema>;
-export type Request = Infer<typeof RequestSchema>;
-export type RequestMeta = Infer<typeof RequestMetaSchema>;
-export type Notification = Infer<typeof NotificationSchema>;
-export type Result = Infer<typeof ResultSchema>;
-export type RequestId = Infer<typeof RequestIdSchema>;
-export type JSONRPCRequest = Infer<typeof JSONRPCRequestSchema>;
-export type JSONRPCNotification = Infer<typeof JSONRPCNotificationSchema>;
-export type JSONRPCResponse = Infer<typeof JSONRPCResponseSchema>;
-export type JSONRPCError = Infer<typeof JSONRPCErrorSchema>;
-export type JSONRPCMessage = Infer<typeof JSONRPCMessageSchema>;
+export type ProgressToken = z.infer<typeof ProgressTokenSchema>;
+export type Cursor = z.infer<typeof CursorSchema>;
+export type Request = z.infer<typeof RequestSchema>;
+export type RequestMeta = z.infer<typeof RequestMetaSchema>;
+export type Notification = z.infer<typeof NotificationSchema>;
+export type Result = z.infer<typeof ResultSchema>;
+export type RequestId = z.infer<typeof RequestIdSchema>;
+export type JSONRPCRequest = z.infer<typeof JSONRPCRequestSchema>;
+export type JSONRPCNotification = z.infer<typeof JSONRPCNotificationSchema>;
+export type JSONRPCResponse = z.infer<typeof JSONRPCResponseSchema>;
+export type JSONRPCError = z.infer<typeof JSONRPCErrorSchema>;
+export type JSONRPCMessage = z.infer<typeof JSONRPCMessageSchema>;
 
 /* Empty result */
-export type EmptyResult = Infer<typeof EmptyResultSchema>;
+export type EmptyResult = z.infer<typeof EmptyResultSchema>;
 
 /* Cancellation */
-export type CancelledNotification = Infer<typeof CancelledNotificationSchema>;
+export type CancelledNotification = z.infer<typeof CancelledNotificationSchema>;
 
 /* Base Metadata */
-export type BaseMetadata = Infer<typeof BaseMetadataSchema>;
+export type BaseMetadata = z.infer<typeof BaseMetadataSchema>;
 
 /* Initialization */
-export type Implementation = Infer<typeof ImplementationSchema>;
-export type ClientCapabilities = Infer<typeof ClientCapabilitiesSchema>;
-export type InitializeRequest = Infer<typeof InitializeRequestSchema>;
-export type ServerCapabilities = Infer<typeof ServerCapabilitiesSchema>;
-export type InitializeResult = Infer<typeof InitializeResultSchema>;
-export type InitializedNotification = Infer<typeof InitializedNotificationSchema>;
+export type Implementation = z.infer<typeof ImplementationSchema>;
+export type ClientCapabilities = z.infer<typeof ClientCapabilitiesSchema>;
+export type InitializeRequest = z.infer<typeof InitializeRequestSchema>;
+export type ServerCapabilities = z.infer<typeof ServerCapabilitiesSchema>;
+export type InitializeResult = z.infer<typeof InitializeResultSchema>;
+export type InitializedNotification = z.infer<
+  typeof InitializedNotificationSchema
+>;
 
 /* Ping */
-export type PingRequest = Infer<typeof PingRequestSchema>;
+export type PingRequest = z.infer<typeof PingRequestSchema>;
 
 /* Progress notifications */
-export type Progress = Infer<typeof ProgressSchema>;
-export type ProgressNotification = Infer<typeof ProgressNotificationSchema>;
+export type Progress = z.infer<typeof ProgressSchema>;
+export type ProgressNotification = z.infer<typeof ProgressNotificationSchema>;
 
 /* Pagination */
-export type PaginatedRequest = Infer<typeof PaginatedRequestSchema>;
-export type PaginatedResult = Infer<typeof PaginatedResultSchema>;
+export type PaginatedRequest = z.infer<typeof PaginatedRequestSchema>;
+export type PaginatedResult = z.infer<typeof PaginatedResultSchema>;
 
 /* Resources */
-export type ResourceContents = Infer<typeof ResourceContentsSchema>;
-export type TextResourceContents = Infer<typeof TextResourceContentsSchema>;
-export type BlobResourceContents = Infer<typeof BlobResourceContentsSchema>;
-export type Resource = Infer<typeof ResourceSchema>;
-export type ResourceTemplate = Infer<typeof ResourceTemplateSchema>;
-export type ListResourcesRequest = Infer<typeof ListResourcesRequestSchema>;
-export type ListResourcesResult = Infer<typeof ListResourcesResultSchema>;
-export type ListResourceTemplatesRequest = Infer<typeof ListResourceTemplatesRequestSchema>;
-export type ListResourceTemplatesResult = Infer<typeof ListResourceTemplatesResultSchema>;
-export type ReadResourceRequest = Infer<typeof ReadResourceRequestSchema>;
-export type ReadResourceResult = Infer<typeof ReadResourceResultSchema>;
-export type ResourceListChangedNotification = Infer<typeof ResourceListChangedNotificationSchema>;
-export type SubscribeRequest = Infer<typeof SubscribeRequestSchema>;
-export type UnsubscribeRequest = Infer<typeof UnsubscribeRequestSchema>;
-export type ResourceUpdatedNotification = Infer<typeof ResourceUpdatedNotificationSchema>;
+export type ResourceContents = z.infer<typeof ResourceContentsSchema>;
+export type TextResourceContents = z.infer<typeof TextResourceContentsSchema>;
+export type BlobResourceContents = z.infer<typeof BlobResourceContentsSchema>;
+export type Resource = z.infer<typeof ResourceSchema>;
+export type ResourceTemplate = z.infer<typeof ResourceTemplateSchema>;
+export type ListResourcesRequest = z.infer<typeof ListResourcesRequestSchema>;
+export type ListResourcesResult = z.infer<typeof ListResourcesResultSchema>;
+export type ListResourceTemplatesRequest = z.infer<
+  typeof ListResourceTemplatesRequestSchema
+>;
+export type ListResourceTemplatesResult = z.infer<
+  typeof ListResourceTemplatesResultSchema
+>;
+export type ReadResourceRequest = z.infer<typeof ReadResourceRequestSchema>;
+export type ReadResourceResult = z.infer<typeof ReadResourceResultSchema>;
+export type ResourceListChangedNotification = z.infer<
+  typeof ResourceListChangedNotificationSchema
+>;
+export type SubscribeRequest = z.infer<typeof SubscribeRequestSchema>;
+export type UnsubscribeRequest = z.infer<typeof UnsubscribeRequestSchema>;
+export type ResourceUpdatedNotification = z.infer<
+  typeof ResourceUpdatedNotificationSchema
+>;
 
 /* Prompts */
-export type PromptArgument = Infer<typeof PromptArgumentSchema>;
-export type Prompt = Infer<typeof PromptSchema>;
-export type ListPromptsRequest = Infer<typeof ListPromptsRequestSchema>;
-export type ListPromptsResult = Infer<typeof ListPromptsResultSchema>;
-export type GetPromptRequest = Infer<typeof GetPromptRequestSchema>;
-export type TextContent = Infer<typeof TextContentSchema>;
-export type ImageContent = Infer<typeof ImageContentSchema>;
-export type AudioContent = Infer<typeof AudioContentSchema>;
-export type EmbeddedResource = Infer<typeof EmbeddedResourceSchema>;
-export type ResourceLink = Infer<typeof ResourceLinkSchema>;
-export type ContentBlock = Infer<typeof ContentBlockSchema>;
-export type PromptMessage = Infer<typeof PromptMessageSchema>;
-export type GetPromptResult = Infer<typeof GetPromptResultSchema>;
-export type PromptListChangedNotification = Infer<typeof PromptListChangedNotificationSchema>;
+export type PromptArgument = z.infer<typeof PromptArgumentSchema>;
+export type Prompt = z.infer<typeof PromptSchema>;
+export type ListPromptsRequest = z.infer<typeof ListPromptsRequestSchema>;
+export type ListPromptsResult = z.infer<typeof ListPromptsResultSchema>;
+export type GetPromptRequest = z.infer<typeof GetPromptRequestSchema>;
+export type TextContent = z.infer<typeof TextContentSchema>;
+export type ImageContent = z.infer<typeof ImageContentSchema>;
+export type AudioContent = z.infer<typeof AudioContentSchema>;
+export type EmbeddedResource = z.infer<typeof EmbeddedResourceSchema>;
+export type ResourceLink = z.infer<typeof ResourceLinkSchema>;
+export type ContentBlock = z.infer<typeof ContentBlockSchema>;
+export type PromptMessage = z.infer<typeof PromptMessageSchema>;
+export type GetPromptResult = z.infer<typeof GetPromptResultSchema>;
+export type PromptListChangedNotification = z.infer<
+  typeof PromptListChangedNotificationSchema
+>;
 
 /* Tools */
-export type ToolAnnotations = Infer<typeof ToolAnnotationsSchema>;
-export type Tool = Infer<typeof ToolSchema>;
-export type ListToolsRequest = Infer<typeof ListToolsRequestSchema>;
-export type ListToolsResult = Infer<typeof ListToolsResultSchema>;
-export type CallToolResult = Infer<typeof CallToolResultSchema>;
-export type CompatibilityCallToolResult = Infer<typeof CompatibilityCallToolResultSchema>;
-export type CallToolRequest = Infer<typeof CallToolRequestSchema>;
-export type ToolListChangedNotification = Infer<typeof ToolListChangedNotificationSchema>;
+export type ToolAnnotations = z.infer<typeof ToolAnnotationsSchema>;
+export type Tool = z.infer<typeof ToolSchema>;
+export type ListToolsRequest = z.infer<typeof ListToolsRequestSchema>;
+export type ListToolsResult = z.infer<typeof ListToolsResultSchema>;
+export type CallToolResult = z.infer<typeof CallToolResultSchema>;
+export type CompatibilityCallToolResult = z.infer<
+  typeof CompatibilityCallToolResultSchema
+>;
+export type CallToolRequest = z.infer<typeof CallToolRequestSchema>;
+export type ToolListChangedNotification = z.infer<
+  typeof ToolListChangedNotificationSchema
+>;
 
 /* Logging */
-export type LoggingLevel = Infer<typeof LoggingLevelSchema>;
-export type SetLevelRequest = Infer<typeof SetLevelRequestSchema>;
-export type LoggingMessageNotification = Infer<typeof LoggingMessageNotificationSchema>;
+export type LoggingLevel = z.infer<typeof LoggingLevelSchema>;
+export type SetLevelRequest = z.infer<typeof SetLevelRequestSchema>;
+export type LoggingMessageNotification = z.infer<
+  typeof LoggingMessageNotificationSchema
+>;
 
 /* Sampling */
-export type SamplingMessage = Infer<typeof SamplingMessageSchema>;
-export type CreateMessageRequest = Infer<typeof CreateMessageRequestSchema>;
-export type CreateMessageResult = Infer<typeof CreateMessageResultSchema>;
+export type SamplingMessage = z.infer<typeof SamplingMessageSchema>;
+export type CreateMessageRequest = z.infer<typeof CreateMessageRequestSchema>;
+export type CreateMessageResult = z.infer<typeof CreateMessageResultSchema>;
 
 /* Elicitation */
-export type BooleanSchema = Infer<typeof BooleanSchemaSchema>;
-export type StringSchema = Infer<typeof StringSchemaSchema>;
-export type NumberSchema = Infer<typeof NumberSchemaSchema>;
-export type EnumSchema = Infer<typeof EnumSchemaSchema>;
-export type PrimitiveSchemaDefinition = Infer<typeof PrimitiveSchemaDefinitionSchema>;
-export type ElicitRequest = Infer<typeof ElicitRequestSchema>;
-export type ElicitResult = Infer<typeof ElicitResultSchema>;
+export type BooleanSchema = z.infer<typeof BooleanSchemaSchema>;
+export type StringSchema = z.infer<typeof StringSchemaSchema>;
+export type NumberSchema = z.infer<typeof NumberSchemaSchema>;
+export type EnumSchema = z.infer<typeof EnumSchemaSchema>;
+export type PrimitiveSchemaDefinition = z.infer<
+  typeof PrimitiveSchemaDefinitionSchema
+>;
+export type ElicitRequest = z.infer<typeof ElicitRequestSchema>;
+export type ElicitResult = z.infer<typeof ElicitResultSchema>;
 
 /* Autocomplete */
-export type ResourceTemplateReference = Infer<typeof ResourceTemplateReferenceSchema>;
+export type ResourceTemplateReference = z.infer<
+  typeof ResourceTemplateReferenceSchema
+>;
 /**
  * @deprecated Use ResourceTemplateReference instead
  */
 export type ResourceReference = ResourceTemplateReference;
-export type PromptReference = Infer<typeof PromptReferenceSchema>;
-export type CompleteRequest = Infer<typeof CompleteRequestSchema>;
-export type CompleteResult = Infer<typeof CompleteResultSchema>;
+export type PromptReference = z.infer<typeof PromptReferenceSchema>;
+export type CompleteRequest = z.infer<typeof CompleteRequestSchema>;
+export type CompleteResult = z.infer<typeof CompleteResultSchema>;
 
 /* Roots */
-export type Root = Infer<typeof RootSchema>;
-export type ListRootsRequest = Infer<typeof ListRootsRequestSchema>;
-export type ListRootsResult = Infer<typeof ListRootsResultSchema>;
-export type RootsListChangedNotification = Infer<typeof RootsListChangedNotificationSchema>;
+export type Root = z.infer<typeof RootSchema>;
+export type ListRootsRequest = z.infer<typeof ListRootsRequestSchema>;
+export type ListRootsResult = z.infer<typeof ListRootsResultSchema>;
+export type RootsListChangedNotification = z.infer<
+  typeof RootsListChangedNotificationSchema
+>;
 
 /* Client messages */
-export type ClientRequest = Infer<typeof ClientRequestSchema>;
-export type ClientNotification = Infer<typeof ClientNotificationSchema>;
-export type ClientResult = Infer<typeof ClientResultSchema>;
+export type ClientRequest = z.infer<typeof ClientRequestSchema>;
+export type ClientNotification = z.infer<typeof ClientNotificationSchema>;
+export type ClientResult = z.infer<typeof ClientResultSchema>;
 
 /* Server messages */
-export type ServerRequest = Infer<typeof ServerRequestSchema>;
-export type ServerNotification = Infer<typeof ServerNotificationSchema>;
-export type ServerResult = Infer<typeof ServerResultSchema>;
+export type ServerRequest = z.infer<typeof ServerRequestSchema>;
+export type ServerNotification = z.infer<typeof ServerNotificationSchema>;
+export type ServerResult = z.infer<typeof ServerResultSchema>;
