@@ -114,13 +114,13 @@ export class McpServer {
               title: tool.title,
               description: tool.description,
               inputSchema: tool.inputSchema
-                ? (z.toJSONSchema(tool.inputSchema) as Tool["inputSchema"])
+                ? (safeToJSONSchema(tool.inputSchema) as Tool["inputSchema"])
                 : EMPTY_OBJECT_JSON_SCHEMA,
               annotations: tool.annotations,
             };
 
             if (tool.outputSchema) {
-              toolDefinition.outputSchema = z.toJSONSchema(
+              toolDefinition.outputSchema = safeToJSONSchema(
                 tool.outputSchema,
               ) as Tool["outputSchema"];
             }
@@ -1259,6 +1259,17 @@ const EMPTY_OBJECT_JSON_SCHEMA = {
   type: "object" as const,
   properties: {},
 };
+
+// Helper to safely generate JSON schema from Zod schemas
+function safeToJSONSchema(schema: any): any {
+  try {
+    if (!schema) return EMPTY_OBJECT_JSON_SCHEMA;
+    return z.toJSONSchema(schema);
+  } catch (error) {
+    console.error("JSON Schema generation failed:", error);
+    return EMPTY_OBJECT_JSON_SCHEMA;
+  }
+}
 
 // Helper to check if an object is a Zod schema (ZodRawShape)
 function isZodRawShape(obj: unknown): obj is ZodRawShape {
