@@ -808,8 +808,8 @@ export class McpServer {
     name: string,
     title: string | undefined,
     description: string | undefined,
-    inputSchema: ZodRawShape | undefined,
-    outputSchema: ZodRawShape | undefined,
+    inputSchema: ZodRawShape | ZodObject<any> | undefined,
+    outputSchema: ZodRawShape | ZodObject<any> | undefined,
     annotations: ToolAnnotations | undefined,
     callback: ToolCallback<ZodRawShape | undefined>,
   ): RegisteredTool {
@@ -817,9 +817,17 @@ export class McpServer {
       title,
       description,
       inputSchema:
-        inputSchema === undefined ? undefined : z.object(inputSchema),
+        inputSchema === undefined
+          ? undefined
+          : isZodTypeLike(inputSchema)
+            ? (inputSchema as ZodObject<any>)
+            : z.object(inputSchema),
       outputSchema:
-        outputSchema === undefined ? undefined : z.object(outputSchema),
+        outputSchema === undefined
+          ? undefined
+          : isZodTypeLike(outputSchema)
+            ? (outputSchema as ZodObject<any>)
+            : z.object(outputSchema),
       annotations,
       callback,
       enabled: true,
@@ -983,8 +991,8 @@ export class McpServer {
     config: {
       title?: string;
       description?: string;
-      inputSchema?: InputArgs;
-      outputSchema?: OutputArgs;
+      inputSchema?: InputArgs | ZodObject<InputArgs>;
+      outputSchema?: OutputArgs | ZodObject<OutputArgs>;
       annotations?: ToolAnnotations;
     },
     cb: ToolCallback<InputArgs>,
