@@ -1,16 +1,19 @@
 {
-  "name": "@modelcontextprotocol/sdk",
+  "name": "@alcyone-labs/modelcontextprotocol-sdk",
   "version": "1.16.0",
-  "description": "Model Context Protocol implementation for TypeScript",
+  "description": "Upgrade to Zod V4 for Model Context Protocol implementation for TypeScript",
   "license": "MIT",
   "author": "Anthropic, PBC (https://anthropic.com)",
   "homepage": "https://modelcontextprotocol.io",
-  "bugs": "https://github.com/modelcontextprotocol/typescript-sdk/issues",
+  "bugs": "https://github.com/Alcyone-Labs/mcp-typescript-sdk/issues",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/modelcontextprotocol/typescript-sdk.git"
+    "url": "git+https://github.com/Alcyone-Labs/mcp-typescript-sdk.git"
   },
+  "maintainers": [
+    "Nicolas Embleton <nicolas.embleton@gmail.com>"
+  ],
   "engines": {
     "node": ">=18"
   },
